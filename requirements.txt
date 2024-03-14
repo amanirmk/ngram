@@ -1,0 +1,29 @@
+# code management
+black==23.10.1
+coloredlogs==15.0.1
+mypy==1.7.1
+pydantic==2.5.2
+pylint==3.0.0
+pylint-exit==1.2.0
+python-dotenv==1.0.0
+
+# pipelines
+joblib==1.3.2
+tqdm==4.66.1
+jax==0.4.19
+wandb==0.15.12
+
+# data processing
+numpy==1.26.0
+pandas==2.1.4
+scipy==1.11.4
+scikit-learn==1.2.2
+seaborn==0.13.0
+statsmodels==0.14.1
+matplotlib==3.8.2
+
+# ai models
+openai==0.28.1
+tiktoken==0.5.1
+transformers==4.34.0
+torch==1.13.1

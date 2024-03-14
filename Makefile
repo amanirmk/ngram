@@ -1,0 +1,47 @@
+SHELL := /usr/bin/env bash
+EXEC := python=3.10
+PACKAGE := lullaby
+RUN := python -m
+INSTALL := $(RUN) pip install
+ACTIVATE := source activate $(PACKAGE)
+.DEFAULT_GOAL := help
+
+## help      : print available build commands.
+.PHONY : help
+help : Makefile
+	@sed -n 's/^##//p' $<
+
+## env       : setup environment and install dependencies.
+.PHONY : env
+env : $(PACKAGE).egg-info/
+$(PACKAGE).egg-info/ : setup.py requirements.txt
+ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
+	@conda create -yn $(PACKAGE) $(EXEC)
+endif
+	@$(ACTIVATE); $(INSTALL) -e "."
+
+## format    : format code with black.
+.PHONY : format
+format : env
+	@$(ACTIVATE); black .
+
+## test      : run testing pipeline.
+.PHONY : test
+test: style static
+style : black
+static : mypy pylint 
+mypy : env
+	@$(ACTIVATE); mypy \
+	-p $(PACKAGE) \
+	--ignore-missing-imports
+pylint : env
+	@$(ACTIVATE); pylint $(PACKAGE) \
+	--disable C0112,C0113,C0114,C0115,C0116 \
+	|| pylint-exit $$?
+black : env
+	@$(ACTIVATE); black --check .
+
+## lullaby      : run package.
+.PHONY : $(PACKAGE)
+$(PACKAGE) : env
+	@$(ACTIVATE); $(RUN) $(PACKAGE)
