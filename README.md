@@ -1,1 +1,5 @@
 # ngram
+
+```
+make env
+```
