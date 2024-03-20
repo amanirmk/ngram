@@ -1,61 +1,38 @@
-# Ensure dependencies
-conda install clangxx_osx-64 clang_osx-64 zlib bzip2 cmake
+# Install dependencies
+# conda install -c anaconda boost 
+# conda install cmake clang clangxx_osx-64 clang_osx-64 zlib bzip2
 
-# Set environment variables
-export ENV_LOC=$(conda info --envs | grep '*' | awk '{print $3}')
-export BOOST_ROOT=$ENV_LOC
-export CC=gcc
-export CXX=g++
-export LDFLAGS+=" -std=c++11"
+# Export flags
+export CXX=clang++
+export CC=clang
 export CXXFLAGS+=" -std=c++11"
-export CFLAGS="-march=armv8-a"
 export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
 
-# Install Boost
-wget https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.bz2
-tar --bzip2 -xf boost_1_82_0.tar.bz2
-cd boost_1_82_0
-./bootstrap.sh --with-libraries=all -prefix=$BOOST_ROOT --with-toolset=gcc
-./b2 install --prefix=$BOOST_ROOT
-cd ..
-rm -rf boost_1_82_0
-rm -rf boost_1_82_0.tar.bz2
+# Deactivate environment before building
+# conda deactivate
 
-# Install KenLM
-wget -O - https://kheafield.com/code/kenlm.tar.gz |tar xz
-mkdir kenlm/build
-cd kenlm/build
-cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DENABLE_OPENMP=OFF -DCMAKE_OSX_ARCHITECTURES=arm64
+# Clone the KenLM repository
+git clone https://github.com/kpu/kenlm.git
+cd kenlm
+
+# Build and install KenLM
+mkdir build && cd build
+cmake ..
 make -j2
-cd ../../
 
+# Activate the conda environment again
+# conda activate ngram
 
+# Add KenLM to the conda environment
+# echo "export KENLM_ROOT_DIR=$(pwd)" >> $CONDA_PREFIX/etc/conda/activate.d/kenlm.sh
+# echo "export LD_LIBRARY_PATH=$(pwd)/lib:\$LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/activate.d/kenlm.sh
+# echo "unset KENLM_ROOT_DIR" >> $CONDA_PREFIX/etc/conda/deactivate.d/kenlm.sh
+# echo "unset LD_LIBRARY_PATH" >> $CONDA_PREFIX/etc/conda/deactivate.d/kenlm.sh
 
+# # Restart environment
+# conda deactivate
+# conda activate ngram
 
-# # Ensure dependencies
-# conda install clangxx_osx-64 clang_osx-64 zlib bzip2 cmake
-
-# # Set environment variables
-# export ENV_LOC=$(conda info --envs | grep '*' | awk '{print $3}')
-# export BOOST_ROOT=$ENV_LOC
-# export CC=clang
-# export CXX=clang++
-# export LDFLAGS+=" -std=c++11"
-# export CXXFLAGS+=" -std=c++11"
-# export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-
-# # Install Boost
-# wget https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.bz2
-# tar --bzip2 -xf boost_1_82_0.tar.bz2
-# cd boost_1_82_0
-# ./bootstrap.sh --with-libraries=all --prefix=$BOOST_ROOT --with-toolset=clang
-# ./b2 install --prefix=$BOOST_ROOT
-# cd ..
-
-# # Install KenLM
-# wget -O - https://kheafield.com/code/kenlm.tar.gz |tar xz
-# mkdir kenlm/build
-# cd kenlm/build
-# cmake .. -DCMAKE_CXX_FLAGS="-std=c++11" -DENABLE_OPENMP=OFF
-# make -j2 -v
-# cd ../../
+# Install the Python package
+# cd ../..
+# pip install ./kenlm
