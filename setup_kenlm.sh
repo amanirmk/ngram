@@ -1,3 +1,5 @@
+set -e
+
 export CXX=clang++
 export CC=clang
 export CXXFLAGS+=" -std=c++11"
@@ -10,3 +12,5 @@ cd kenlm
 mkdir build && cd build
 cmake ..
 make -j2
+
+# try getting kenlm from surprisal
