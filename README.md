@@ -1,5 +1,1 @@
 # ngram
-
-```
-make env
-```
