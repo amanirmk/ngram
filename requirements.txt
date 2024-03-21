@@ -22,8 +22,8 @@ seaborn==0.13.0
 statsmodels==0.14.1
 matplotlib==3.8.2
 
-# ai models
-openai==0.28.1
-tiktoken==0.5.1
+# ngram
+cmake==3.28.3
+clang==14
+pypi-kenlm==0.1.20220713
 transformers==4.34.0
-torch==1.13.1

@@ -7,7 +7,7 @@ with open("requirements.txt") as reqs_file:
     requirements = reqs_file.read().split("\n")
 
 setup(
-    name="lullaby",
+    name="ngram",
     description="",
     long_description=readme,
     packages=find_packages(),

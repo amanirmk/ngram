@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 EXEC := python=3.10
-PACKAGE := lullaby
+PACKAGE := ngram
 RUN := python -m
 INSTALL := $(RUN) pip install
 ACTIVATE := source activate $(PACKAGE)
@@ -16,9 +16,9 @@ help : Makefile
 env : $(PACKAGE).egg-info/
 $(PACKAGE).egg-info/ : setup.py requirements.txt
 ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
-	@conda create -yn $(PACKAGE) $(EXEC)
+	@conda init bash; conda create -yn $(PACKAGE) $(EXEC)
 endif
-	@$(ACTIVATE); $(INSTALL) -e "."
+	@$(ACTIVATE); $(INSTALL) -e "."; conda deactivate; bash setup_kenlm.sh
 
 ## format    : format code with black.
 .PHONY : format
@@ -41,7 +41,12 @@ pylint : env
 black : env
 	@$(ACTIVATE); black --check .
 
-## lullaby      : run package.
+## ngram     : run package.
 .PHONY : $(PACKAGE)
 $(PACKAGE) : env
 	@$(ACTIVATE); $(RUN) $(PACKAGE)
+
+## uninstall : remove environment
+.PHONY : uninstall
+uninstall :
+	@conda env remove -n $(PACKAGE); rm -rf kenlm; touch requirements.txt
