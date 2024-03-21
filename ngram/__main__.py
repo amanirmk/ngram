@@ -11,7 +11,7 @@ def main() -> None:
         pass
 
     args = HfArgumentParser(Arguments).parse_args()
-    
+
     model = Model(args.model_path)
     pair = StimulusPair(s1="click on ads", s2="click on it")
     match, final = model.evaluate_pair(pair)
