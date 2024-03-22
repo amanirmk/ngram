@@ -1,15 +1,21 @@
 import typing
+from pathlib import Path
 import kenlm
 from ngram.abstract import Object
 from ngram.datatypes import StimulusPair, NGram
+from ngram.tokenizer import Tokenizer
 
 
 class Model(Object):
-    def __init__(self, path) -> None:
+    BOS = "<s>"
+    EOS = "</s>"
+
+    def __init__(self, path: typing.Union[str, Path]) -> None:
         super().__init__()
-        self._path: str = path
-        self._model = kenlm.Model(self._path)  # type: ignore[attr-defined]
+        self._path = path
+        self._model = kenlm.Model(str(self._path))  # type: ignore[attr-defined]
         self._order = self._model.order
+        self._tokenizer = Tokenizer()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._path})"
@@ -28,8 +34,8 @@ class Model(Object):
         return abs(fpm1 - fpm2)
 
     def final_ngram_diff(self, pair: StimulusPair, n: int) -> float:
-        ng1 = NGram(pair.s1, last_n=n)
-        ng2 = NGram(pair.s2, last_n=n)
+        ng1 = NGram(text=pair.s1, last_n=n)
+        ng2 = NGram(text=pair.s2, last_n=n)
         return self.ngram_diffs(ng1, ng2)
 
     def final_diffs_by_n(self, pair: StimulusPair) -> typing.List[float]:
@@ -43,13 +49,28 @@ class Model(Object):
         return valid
 
     def score(self, text: str, bos: bool = False, eos: bool = False) -> float:
-        return self._model.score(text, bos=bos, eos=eos)
+        return self._model.score(self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos)
 
     def full_scores(
         self, text: str, bos: bool = False, eos: bool = False
-    ) -> typing.Iterator[typing.Tuple[float, int, bool]]:
-        return self._model.full_scores(text, bos=bos, eos=eos)
+    ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
+        return self._model.full_scores(self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos)
 
-    def construct_stimuli(self, ngram_path_prefix: str, n: typing.Optional[int] = None):
-        n = n or self._order
-        pass
+    # I was hoping these would be exact, but it appears the lower order information is unrecoverable (except for unigram)
+    def approximate_subgram_full_scores(
+        self, text: str, n: int, bos: bool = False, eos: bool = False
+    ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
+        tokens = [self.BOS] * bos + text.split() + [self.EOS] * eos
+        ngrams = [NGram(tokens=tokens[:i], last_n=n) for i in range(1, len(tokens) + 1)]
+        scores = [list(self.full_scores(ngram.text()))[-1] for ngram in ngrams][
+            int(bos) :
+        ]
+        return scores
+
+    def approximate_subgram_score(
+        self, text: str, n: int, bos: bool = False, eos: bool = False
+    ) -> float:
+        return sum(
+            score[0]
+            for score in self.approximate_subgram_full_scores(text, n, bos=bos, eos=eos)
+        )
