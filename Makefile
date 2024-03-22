@@ -18,7 +18,13 @@ $(PACKAGE).egg-info/ : setup.py requirements.txt
 ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
 	@conda init bash; conda create -yn $(PACKAGE) $(EXEC)
 endif
-	@$(ACTIVATE); $(INSTALL) -e "."; conda deactivate; bash setup_kenlm.sh
+	@$(ACTIVATE); $(INSTALL) -e "."
+	
+	
+## kenlm     : setup kenlm (not guaranteed to work).
+.PHONY : kenlm
+kenlm : env
+	@bash setup_kenlm.sh
 
 ## format    : format code with black.
 .PHONY : format
@@ -49,4 +55,4 @@ $(PACKAGE) : env
 ## uninstall : remove environment
 .PHONY : uninstall
 uninstall :
-	@conda env remove -n $(PACKAGE); rm -rf kenlm; touch requirements.txt
+	@conda env remove -n $(PACKAGE); touch requirements.txt
