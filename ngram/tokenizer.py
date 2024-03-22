@@ -56,7 +56,7 @@ class Tokenizer:
             with open(output_path, f"{output_mode}t", encoding="utf-8") as f:
                 for line in lines:
                     if line:
-                        f.write(" ".join(line) + "\n"*make_newlines)
+                        f.write(" ".join(line) + "\n" * make_newlines)
         return lines
 
     def tokenize_text(self, text: str) -> typing.List[str]:
@@ -65,12 +65,14 @@ class Tokenizer:
         for word in words:
             tokens.extend(self._recursive_tokenize(word))
         return [t for t in tokens if t != ""]
-    
+
     def process_text_for_kenlm(self, text: str) -> str:
         return " ".join(self.tokenize_text(text))
-    
+
     def _split_by_contractions(self, word: str) -> typing.List[str]:
-        make_subpattern = lambda c: fr"\S+(?={self.SUBTOKEN_CHAR}{c})|{self.SUBTOKEN_CHAR}{c}|\S+(?={c})|{c}"
+        make_subpattern = (
+            lambda c: rf"\S+(?={self.SUBTOKEN_CHAR}{c})|{self.SUBTOKEN_CHAR}{c}|\S+(?={c})|{c}"
+        )
         pattern = "|".join([make_subpattern(c) for c in self.CONTRACTIONS])
         pattern += "|'\S+|\S+"
         return re.findall(pattern, word, re.IGNORECASE | re.DOTALL)
@@ -85,12 +87,18 @@ class Tokenizer:
             if word in self.CONTRACTIONS.keys():
                 word = self.SUBTOKEN_CHAR + word
             # split by contraction
-            word = self._split_by_contractions(word)
+            split_word = self._split_by_contractions(word)
             # recurse and append subtoken
-            if len(word) > 1:
-                return sum([self._recursive_tokenize(self.SUBTOKEN_CHAR*(i>0) + w) for i, w in enumerate(word)], [])
+            if len(split_word) > 1:
+                return sum(
+                    [
+                        self._recursive_tokenize(self.SUBTOKEN_CHAR * (i > 0) + w)
+                        for i, w in enumerate(split_word)
+                    ],
+                    [],
+                )
             else:
-                word = word[0]
+                word = split_word[0]
         if self._lower:
             word = word.lower()
         if self._substitute_contractions:

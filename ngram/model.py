@@ -49,12 +49,16 @@ class Model(Object):
         return valid
 
     def score(self, text: str, bos: bool = False, eos: bool = False) -> float:
-        return self._model.score(self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos)
+        return self._model.score(
+            self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos
+        )
 
     def full_scores(
         self, text: str, bos: bool = False, eos: bool = False
     ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
-        return self._model.full_scores(self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos)
+        return self._model.full_scores(
+            self._tokenizer.process_text_for_kenlm(text), bos=bos, eos=eos
+        )
 
     # I was hoping these would be exact, but it appears the lower order information is unrecoverable (except for unigram)
     def approximate_subgram_full_scores(

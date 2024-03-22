@@ -10,7 +10,6 @@ class StimulusPair(BaseModel):
 
 
 class NGram(Object):
-
     def __init__(
         self,
         text: typing.Optional[str] = None,
