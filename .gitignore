@@ -1,6 +1,6 @@
 # Module related
 kenlm/
-corpora*/
+data/
 
 # Mac
 .DS_Store

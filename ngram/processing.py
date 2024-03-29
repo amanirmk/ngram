@@ -1,62 +1,126 @@
+import re
 import typing
+import string
+import jax
 import os
-from pathlib import Path
-import pandas as pd
 from tqdm import tqdm
-from ngram.model import Model
+from pathlib import Path
 from ngram.datatypes import NGram
-from ngram.tokenizer import Tokenizer
+from ngram.model import Model
 
+safe = string.ascii_letters + string.digits + '!\',-.:;?`" '
+unsafe = rf'[{re.escape("".join(set(string.printable) - set(safe)))}]'
+line_ending = r'[.!?]'
+line_separation = r'[;:-]'
+all_punc = rf'[{re.escape(string.punctuation)}]'
+contractions = r'n\'?t|\'?s|\'?m|\'?re|\'?ve|\'?ll|\'?d'
 
-def create_model_files(
-    input_folder: str,
-    output_folder: str,
-    n,
-    file_prefix: str = "all_corpora",
-    all_up_to=True,
-):
-    output_file = preprocess_text(
-        input_folder, output_folder + "/" + file_prefix + ".txt"
-    )
-    create_arpa_and_binary(output_file, output_folder, n, all_up_to)
-    if all_up_to:
-        for k in range(2, n + 1):
-            create_ngram_list(
-                output_folder + "/" + str(Path(output_file).stem) + f"_{k}"
-            )
-    else:
-        create_ngram_list(output_folder + "/" + str(Path(output_file).stem) + f"_{n}")
+@jax.jit
+def augment_text(text: str):
+    # remove anything beginning with "@"
+    text = re.sub(r'@\S*', '-', text) # <-- so it gets line-broken later
+    # remove text in square brackets
+    text = re.sub(r'\[.*?\]', '', text)
+    # remove double-quotes
+    text = re.sub(r'"', '', text)
+    # remove hyphens (in words like "well-known")
+    text = re.sub(r'(\w+)-(\w+)', r'\1\2', text)
+    # turn ".!" into "!"
+    text = re.sub(r'\.!', r'!', text)
+    # remove space between "7: 30" and so on
+    text = re.sub(r'(\d+):\s+(\d+)', r'\1:\2', text)
+    # remove spaces before punctuation
+    text = re.sub(rf'\s+({all_punc})', r'\1', text)
+    # remove space before n't, 'll and so on
+    text = re.sub(rf'([a-zA-Z])\s+({contractions})\b', r'\1\2', text, re.IGNORECASE)
+    # remove the space between gon na, wan na
+    text = re.sub(r'(gon|wan)\s+na\b', r'\1na', text, re.IGNORECASE)
+    # replace multiple spaces with a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text
 
+@jax.jit
+def split_lines(lines: typing.Iterable[str]) -> typing.Iterable[str]:
+    for line in tqdm(lines, desc="Splitting lines"):
+        for split_line in re.split(fr'(.*?(?:{line_ending}|{line_separation})) ', line):
+            yield split_line
 
-def preprocess_text(
-    input_folder: str,
-    output_file: str,
-    lower: bool = True,
-    remove_punc: bool = True,
-    remove_meta: bool = True,
-    split_contractions: bool = True,
-    substitute_contractions: bool = False,
-    make_newlines: bool = True,
-) -> str:
-    files = []
-    for dirpath, _, filenames in os.walk(input_folder):
-        for filename in filenames:
-            files.append(os.path.join(dirpath, filename))
+@jax.jit
+def filter_and_fix_lines(lines: typing.Iterable[str]) -> typing.Iterable[str]:
+    for line in tqdm(lines, desc="Filtering and fixing lines"):
+        line = line.strip()
+        if not line: continue
+        
+        # must start with a letter
+        if not re.match(r'[a-zA-Z]', line): continue
+        # must not contain certain characters
+        if re.search(unsafe, line): continue
+        # must not have 4+ consecutive punctuation
+        if re.search(fr"{all_punc}{{4,}}", line): continue
+        # remove 'voice-over' from line (cornell movies)
+        line = re.sub(r'Voice-over', '', line)
+        # remove all lingering separation symbols
+        line = re.sub(line_separation, '', line)
+        # add period to end of line if no punctuation
+        if not re.match(line_ending, line[-1]): line += "."
+        # must be at least 5 words and no more than 50
+        if not 5 <= len(re.findall(r'\w+', line)) <= 50: continue
+        
+        line = line.strip()
+        yield line
 
-    tokenizer = Tokenizer(
-        lower=lower,
-        remove_punc=remove_punc,
-        remove_meta=remove_meta,
-        split_contractions=split_contractions,
-        substitute_contractions=substitute_contractions,
-    )
+@jax.jit
+def process_text(text: str) -> str:
+    # lowercase
+    text = text.lower()
+    # remove hyphens (in words like "well-known")
+    text = re.sub(r'(\w+)-(\w+)', r'\1\2', text)
+    # strip punctuation
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    # replace multiple spaces with a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text
+
+@jax.jit
+def tokenize(text: typing.List[str]) -> typing.List[str]:
+    return process_text(text).split()
+
+def process_file(file: typing.Union[str, Path]) -> typing.Iterable[str]:
+    with open(file, 'rt', encoding="utf-8") as f:
+        lines = []
+        for line in tqdm(f.readlines(), desc="Reading and augmenting lines"):
+            lines.append(augment_text(line))
+
+    lines = split_lines(lines)
+    lines = filter_and_fix_lines(lines)
+    for line in tqdm(lines, desc="Processing text"):
+        yield process_text(line)
+
+def preprocess_files(input_folder: typing.Union[str, Path], output_file: typing.Union[str, Path]) -> Path:
+    files = list(Path(input_folder).rglob('*.txt'))
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     for file in tqdm(files, desc="Preprocessing files"):
-        tokenizer.tokenize_file(
-            file, output_file, output_mode="a", make_newlines=make_newlines
-        )
+        with open(output_file, 'at', encoding="utf-8") as f:
+            for line in process_file(file):
+                f.write(line + '\n')
     return output_file
 
+def create_arpa(
+    text_file: typing.Union[str, Path], arpa_path: typing.Union[str, Path], n
+) -> None:
+    flag = os.system(f"./kenlm/build/bin/lmplz -o {n} <{text_file} >{arpa_path}")
+    if flag != 0:
+        raise ValueError("Error in creating ARPA file")
 
+
+def create_binary(
+    arpa_path: typing.Union[str, Path], binary_path: typing.Union[str, Path]
+) -> None:
+    flag = os.system(f"./kenlm/build/bin/build_binary {arpa_path} {binary_path}")
+    if flag != 0:
+        raise ValueError("Error in creating binary file")
+    
 def create_arpa_and_binary(
     text_file: typing.Union[str, Path],
     output_folder: typing.Union[str, Path],
@@ -78,27 +142,11 @@ def create_arpa_and_binary(
         create_arpa(text_file, arpa_path, n)
         create_binary(arpa_path, binary_path)
 
-
-def create_arpa(
-    text_file: typing.Union[str, Path], arpa_path: typing.Union[str, Path], n
-) -> None:
-    flag = os.system(f"./kenlm/build/bin/lmplz -o {n} <{text_file} >{arpa_path}")
-    if flag != 0:
-        raise ValueError("Error in creating ARPA file")
-
-
-def create_binary(
-    arpa_path: typing.Union[str, Path], binary_path: typing.Union[str, Path]
-) -> None:
-    flag = os.system(f"./kenlm/build/bin/build_binary {arpa_path} {binary_path}")
-    if flag != 0:
-        raise ValueError("Error in creating binary file")
-
-
-def create_ngram_list(file_path_and_stem: typing.Union[str, Path]) -> None:
-    arpa_path = Path(file_path_and_stem).with_suffix(".arpa")
-    binary_path = Path(file_path_and_stem).with_suffix(".binary")
-    ngram_path = Path(file_path_and_stem).with_suffix(".ngram")
+def create_ngram(arpa: typing.Union[str, Path], binary: typing.Union[str, Path], output_file: typing.Union[str, Path]) -> None:
+    arpa_path = Path(arpa)
+    binary_path = Path(binary)
+    ngram_path = Path(output_file)
+    ngram_path.parent.mkdir(parents=True, exist_ok=True)
 
     t = tqdm(desc="Reading ngrams")
     with open(arpa_path, "rt", encoding="utf-8") as f:
@@ -137,97 +185,25 @@ def create_ngram_list(file_path_and_stem: typing.Union[str, Path]) -> None:
         for ngram, fpm in tqdm(scored_ngrams, desc="Writing ngrams"):
             f.write(f"{fpm} {ngram.text()}\n")
 
+def create_model_files(
+    input_folder: typing.Union[str, Path],
+    output_folder: typing.Union[str, Path],
+    n,
+    filestem: str = "all_corpora",
+    all_up_to=True,
+) -> None:
+    input_folder = Path(input_folder)
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    
+    text_file = output_folder / Path(filestem + ".txt")
+    arpa_file = output_folder / Path(filestem + ".arpa")
+    binary_file = output_folder / Path(filestem + ".binary")
 
-def analyze_single_stimuli_with_unigram(
-    stimulus: str, any_model: Model, bos: bool = False, eos: bool = False
-) -> typing.Tuple[typing.List[float], float, float, bool, bool]:
-    scores = list(
-        any_model.approximate_subgram_full_scores(stimulus, 1, bos=bos, eos=eos)
-    )
-    any_oov = any(s[2] for s in scores)
-    any_backed_off = False
-    logprob = sum(s[0] for s in scores)
-    freq_per_mil = 10**logprob * 1000000
-    lobprob_by_token = [s[0] for s in scores]
-    return lobprob_by_token, logprob, freq_per_mil, any_oov, any_backed_off
-
-
-def analyze_single_stimulus_with_model(
-    stimulus: str, model: Model, bos: bool = False, eos: bool = False
-) -> typing.Tuple[typing.List[float], float, float, bool, bool]:
-    scores = list(model.full_scores(stimulus, bos=bos, eos=eos))
-    any_oov = any(s[2] for s in scores)
-    any_backed_off = any(s[1] < model._order for s in scores[model._order - 1 :])
-    logprob = sum(s[0] for s in scores)
-    freq_per_mil = 10**logprob * 1000000
-    lobprob_by_token = [s[0] for s in scores]
-    return lobprob_by_token, logprob, freq_per_mil, any_oov, any_backed_off
-
-
-def analyze_single_stimulus_with_multiple_models(
-    stimulus: str,
-    models: typing.List[Model],
-    include_unigram=True,
-    bos: bool = False,
-    eos: bool = False,
-) -> typing.Dict[str, typing.Any]:
-    tokenized_stimulus = models[0]._tokenizer.process_text_for_kenlm(stimulus)
-    if bos:
-        tokenized_stimulus = models[0].BOS + " " + tokenized_stimulus
-    if eos:
-        tokenized_stimulus += " " + models[0].EOS
-
-    results: typing.Dict[str, typing.Any] = {
-        "stimulus": stimulus,
-        "tokenized_stimulus": tokenized_stimulus,
-    }
-    if include_unigram:
-        (
-            lobprob_by_token,
-            logprob,
-            freq_per_mil,
-            any_oov,
-            any_backed_off,
-        ) = analyze_single_stimuli_with_unigram(stimulus, models[0], bos=bos, eos=eos)
-        results["logprob_by_token_1"] = lobprob_by_token
-        results["logprob_1"] = logprob
-        results["freq_per_mil_1"] = freq_per_mil
-        results["any_backed_off_1"] = any_backed_off
-        results["any_oov_1"] = any_oov
-    for model in models:
-        (
-            lobprob_by_token,
-            logprob,
-            freq_per_mil,
-            any_oov,
-            any_backed_off,
-        ) = analyze_single_stimulus_with_model(stimulus, model, bos=bos, eos=eos)
-        k = model._order
-        results[f"logprob_by_token_{k}"] = lobprob_by_token
-        results[f"logprob_{k}"] = logprob
-        results[f"freq_per_mil_{k}"] = freq_per_mil
-        results[f"any_backed_off_{k}"] = any_backed_off
-        results[f"any_oov_{k}"] = any_oov
-    return results
-
-
-def analyze_single_stimuli_data(
-    stimuli: typing.Iterable,
-    model_files: typing.List[typing.Union[str, Path]],
-    csv_file: typing.Union[Path, str] = "results.csv",
-    bos: bool = False,
-    eos: bool = False,
-) -> pd.DataFrame:
-    models = [Model(file) for file in model_files]
-    results = []
-    for stimulus in tqdm(stimuli, desc="Analyzing stimuli"):
-        results.append(
-            analyze_single_stimulus_with_multiple_models(
-                stimulus, models, bos=bos, eos=eos
-            )
-        )
-    pd.DataFrame(results).to_csv(csv_file)
-
-
-def analyze_stimuli_pair_with_model():
-    return NotImplemented
+    preprocess_files(input_folder, text_file)
+    create_arpa_and_binary(text_file, output_folder, n, all_up_to)
+    if all_up_to:
+        for k in range(2, n + 1):
+            create_ngram(arpa_file, binary_file, output_folder / Path(filestem + f"_{k}.ngram"))
+    else:
+        create_ngram(arpa_file, binary_file, output_folder / Path(filestem + f"_{n}.ngram"))
