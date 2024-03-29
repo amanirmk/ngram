@@ -1,7 +1,6 @@
 import typing
 from pydantic import BaseModel
 from ngram.abstract import Object
-from ngram.processing import tokenize
 
 
 class StimulusPair(BaseModel):
@@ -16,6 +15,9 @@ class NGram(Object):
         tokens: typing.Optional[typing.Iterable[str]] = None,
         last_n=0,
     ):
+        # avoiding circular import
+        from ngram.processing import tokenize
+
         assert (text or tokens) and not (
             text and tokens
         ), "Text or tokens must be provided, and not both"

@@ -3,7 +3,6 @@ from pathlib import Path
 import kenlm
 from ngram.abstract import Object
 from ngram.datatypes import StimulusPair, NGram
-from ngram.processing import process_text
 
 
 class Model(Object):
@@ -42,11 +41,17 @@ class Model(Object):
         return [self.final_ngram_diff(pair, n)[0] for n in range(1, self._order + 1)]
 
     def score(self, text: str, bos: bool = False, eos: bool = False) -> float:
+        # avoiding circular import
+        from ngram.processing import process_text
+
         return self._model.score(process_text(text), bos=bos, eos=eos)
 
     def full_scores(
         self, text: str, bos: bool = False, eos: bool = False
     ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
+        # avoiding circular import
+        from ngram.processing import process_text
+
         return self._model.full_scores(process_text(text), bos=bos, eos=eos)
 
     def approximate_subgram_full_scores(
