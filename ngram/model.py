@@ -34,24 +34,20 @@ class Model(Object):
         return abs(fpm1 - fpm2), both_in_vocab
 
     def final_ngram_diff(self, pair: StimulusPair, n: int) -> typing.Tuple[float, bool]:
-        ng1 = NGram(text=pair.s1, last_n=n)
-        ng2 = NGram(text=pair.s2, last_n=n)
+        ng1 = NGram(text=pair.highItem, last_n=n)
+        ng2 = NGram(text=pair.lowItem, last_n=n)
         return self.ngram_diffs(ng1, ng2)
 
     def approximate_final_diffs_by_n(self, pair: StimulusPair) -> typing.List[float]:
         return [self.final_ngram_diff(pair, n)[0] for n in range(1, self._order + 1)]
 
     def score(self, text: str, bos: bool = False, eos: bool = False) -> float:
-        return self._model.score(
-            process_text(text), bos=bos, eos=eos
-        )
+        return self._model.score(process_text(text), bos=bos, eos=eos)
 
     def full_scores(
         self, text: str, bos: bool = False, eos: bool = False
     ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
-        return self._model.full_scores(
-            process_text(text), bos=bos, eos=eos
-        )
+        return self._model.full_scores(process_text(text), bos=bos, eos=eos)
 
     def approximate_subgram_full_scores(
         self, text: str, n: int, bos: bool = False, eos: bool = False

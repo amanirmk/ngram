@@ -1,7 +1,7 @@
 import typing
 from pydantic import BaseModel
 from ngram.abstract import Object
-from ngram.processing import segment_text
+from ngram.processing import tokenize
 
 
 class StimulusPair(BaseModel):
@@ -20,7 +20,7 @@ class NGram(Object):
             text and tokens
         ), "Text or tokens must be provided, and not both"
         if text:
-            self._tokens = tuple(segment_text(text)[-last_n:])
+            self._tokens = tuple(tokenize(text)[-last_n:])
         else:
             self._tokens = tuple(tokens[-last_n:])  # type: ignore[index]
         self._n = len(self._tokens)
