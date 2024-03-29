@@ -113,7 +113,6 @@ def create_arpa(
     if flag != 0:
         raise ValueError("Error in creating ARPA file")
 
-
 def create_binary(
     arpa_path: typing.Union[str, Path], binary_path: typing.Union[str, Path]
 ) -> None:
@@ -127,18 +126,21 @@ def create_arpa_and_binary(
     n: int,
     all_up_to: bool = False,
 ) -> None:
-    folder = Path(output_folder)
-    folder.mkdir(parents=True, exist_ok=True)
-    stem = str(Path(text_file).stem)
+    text_file = Path(text_file)
+    arpa_folder = Path(output_folder) / "arpa"
+    binary_folder = Path(output_folder) / "bin"
+    arpa_folder.mkdir(parents=True, exist_ok=True)
+    binary_folder.mkdir(parents=True, exist_ok=True)
+    
     if all_up_to:
         for k in range(2, n + 1):
-            arpa_path = folder / Path(stem + f"_{k}.arpa")
-            binary_path = folder / Path(stem + f"_{k}.binary")
+            arpa_path = arpa_folder / Path(text_file.stem + f"_{k}.arpa")
+            binary_path = binary_folder / Path(text_file.stem + f"_{k}.binary")
             create_arpa(text_file, arpa_path, k)
             create_binary(arpa_path, binary_path)
     else:
-        arpa_path = folder / Path(stem + f"_{n}.arpa")
-        binary_path = folder / Path(stem + f"_{n}.binary")
+        arpa_path = arpa_folder / Path(text_file.stem + f"_{n}.arpa")
+        binary_path = binary_folder / Path(text_file.stem + f"_{n}.binary")
         create_arpa(text_file, arpa_path, n)
         create_binary(arpa_path, binary_path)
 
@@ -187,23 +189,22 @@ def create_ngram(arpa: typing.Union[str, Path], binary: typing.Union[str, Path],
 
 def create_model_files(
     input_folder: typing.Union[str, Path],
-    output_folder: typing.Union[str, Path],
+    processed_corpora_folder: typing.Union[str, Path],
+    model_output_folder: typing.Union[str, Path],
     n,
     filestem: str = "all_corpora",
     all_up_to=True,
 ) -> None:
-    input_folder = Path(input_folder)
-    output_folder = Path(output_folder)
-    output_folder.mkdir(parents=True, exist_ok=True)
-    
-    text_file = output_folder / Path(filestem + ".txt")
-    arpa_file = output_folder / Path(filestem + ".arpa")
-    binary_file = output_folder / Path(filestem + ".binary")
+    input_folder = Path(input_folder)    
+    text_file = processed_corpora_folder / Path(filestem + ".txt")
+    arpa_file = model_output_folder / 'arpa' / Path(filestem + ".arpa")
+    binary_file = model_output_folder / 'bin' / Path(filestem + ".binary")
+    ngram_file = model_output_folder / 'ngram' / Path(filestem + ".ngram")
 
     preprocess_files(input_folder, text_file)
-    create_arpa_and_binary(text_file, output_folder, n, all_up_to)
+    create_arpa_and_binary(text_file, model_output_folder, n, all_up_to)
     if all_up_to:
         for k in range(2, n + 1):
-            create_ngram(arpa_file, binary_file, output_folder / Path(filestem + f"_{k}.ngram"))
+            create_ngram(arpa_file, binary_file, ngram_file.parent / Path(ngram_file.stem + f"_{k}.ngram"))
     else:
-        create_ngram(arpa_file, binary_file, output_folder / Path(filestem + f"_{n}.ngram"))
+        create_ngram(arpa_file, binary_file, ngram_file.parent / Path(ngram_file.stem + f"_{n}.ngram"))
