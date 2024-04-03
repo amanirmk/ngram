@@ -22,6 +22,7 @@ def main() -> None:
             args.processed_corpora,
             args.model_files,
             args.max_n,
+            args.kenlm_bin_path,
             args.processed_filestem,
             args.all_up_to,
         )

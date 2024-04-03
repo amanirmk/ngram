@@ -15,6 +15,9 @@ class Arguments:
     model_files: typing.Optional[str] = dataclasses.field(
         default="./data/model_files",
     )
+    kenlm_bin_path: typing.Optional[str] = dataclasses.field(
+        default="./kenlm/build/bin",
+    )
     stimuli: typing.Optional[str] = dataclasses.field(
         default="./data/stimuli",
     )

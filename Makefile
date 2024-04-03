@@ -23,7 +23,7 @@ endif
 	
 ## kenlm     : setup kenlm (not guaranteed to work).
 .PHONY : kenlm
-kenlm : env
+kenlm :
 	@bash setup_kenlm.sh
 
 ## format    : format code with black.

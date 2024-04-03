@@ -4,8 +4,8 @@ from ngram.abstract import Object
 
 
 class StimulusPair(BaseModel):
-    highItem: str
-    lowItem: str
+    high_item: str
+    low_item: str
 
 
 class NGram(Object):
@@ -27,6 +27,10 @@ class NGram(Object):
             self._tokens = tuple(tokens[-last_n:])  # type: ignore[index]
         self._n = len(self._tokens)
         self._text = " ".join(self._tokens)
+        if self._n == 0 or self._text == "":
+            raise ValueError(
+                f"No tokens found: input={text or tokens}, output={self._tokens}"
+            )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._text})"

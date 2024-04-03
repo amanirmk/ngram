@@ -26,15 +26,36 @@ class Model(Object):
         in_vocab = n_used == len(ngram) and not oov
         return fpm, in_vocab
 
-    def ngram_diffs(self, ngram1: NGram, ngram2: NGram) -> typing.Tuple[float, bool]:
+    def ngram_freqs(
+        self,
+        text: str,
+        n: typing.Optional[int] = None,
+        bos: bool = False,
+        eos: bool = False,
+    ) -> typing.List[float]:
+        # avoiding circular import
+        from ngram.processing import process_text
+
+        n = n or self._order
+        text = process_text(text)
+        tokens = [self.BOS] * bos + text.split() + [self.EOS] * eos
+        ngrams = [NGram(tokens=tokens[:i], last_n=n) for i in range(n, len(tokens) + 1)]
+        freq_per_mils = [self.freq_per_mil(ngram)[0] for ngram in ngrams]
+        return freq_per_mils
+
+    def ngram_diffs(
+        self, ngram1: NGram, ngram2: NGram
+    ) -> typing.Tuple[float, bool, float, float]:
         fpm1, in_vocab1 = self.freq_per_mil(ngram1)
         fpm2, in_vocab2 = self.freq_per_mil(ngram2)
         both_in_vocab = in_vocab1 and in_vocab2
-        return abs(fpm1 - fpm2), both_in_vocab
+        return abs(fpm1 - fpm2), both_in_vocab, fpm1, fpm2
 
-    def final_ngram_diff(self, pair: StimulusPair, n: int) -> typing.Tuple[float, bool]:
-        ng1 = NGram(text=pair.highItem, last_n=n)
-        ng2 = NGram(text=pair.lowItem, last_n=n)
+    def final_ngram_diff(
+        self, pair: StimulusPair, n: int
+    ) -> typing.Tuple[float, bool, float, float]:
+        ng1 = NGram(text=pair.high_item, last_n=n)
+        ng2 = NGram(text=pair.low_item, last_n=n)
         return self.ngram_diffs(ng1, ng2)
 
     def approximate_final_diffs_by_n(self, pair: StimulusPair) -> typing.List[float]:
@@ -57,6 +78,10 @@ class Model(Object):
     def approximate_subgram_full_scores(
         self, text: str, n: int, bos: bool = False, eos: bool = False
     ) -> typing.Iterable[typing.Tuple[float, int, bool]]:
+        # avoiding circular import
+        from ngram.processing import process_text
+
+        text = process_text(text)
         tokens = [self.BOS] * bos + text.split() + [self.EOS] * eos
         ngrams = [NGram(tokens=tokens[:i], last_n=n) for i in range(1, len(tokens) + 1)]
         scores = [list(self.full_scores(ngram.text()))[-1] for ngram in ngrams][

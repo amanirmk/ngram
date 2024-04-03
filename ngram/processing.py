@@ -8,8 +8,13 @@ from ngram.datatypes import NGram
 from ngram.model import Model
 from ngram.abstract import Object
 
+
+class Processing(Object):
+    pass
+
+
 SAFE = string.ascii_letters + string.digits + "!',-.:;?`\" "
-SURROGATES = r"[\ud800-\udfff]"
+SURROGATES = r"[\ud800-\udfff]"  # for when what's read in is not utf-8 compatible
 UNSAFE = rf'[{re.escape("".join(set(string.printable) - set(SAFE)))}]|{SURROGATES}'
 LINE_ENDING = r"[.!?]"
 LINE_SEPARATION = r"[;:-]"
@@ -21,13 +26,14 @@ def augment_lines(
     lines: typing.Iterable[str], disable_tqdm: bool = False
 ) -> typing.Iterable[str]:
     for line in tqdm(lines, desc="Augmenting lines", disable=disable_tqdm):
+        # remove cornell movie dialogues metadata
         if "+++$+++" in line:
             line = line.split("+++$+++")[-1]
-        # replace unicode quotes with ascii quotes
+        # replace unicode quotes with ascii quotes (i think this might not actually occur)
         line = re.sub(r"‘|’", "'", line)
         line = re.sub(r"“|”", '"', line)
-        # remove anything beginning with "@"
-        line = re.sub(r"@\S*", "-", line)  # <-- so it gets line-broken later
+        # remove anything beginning with "@" (metadata)
+        line = re.sub(r"@\S*", "-", line)  # "-" so it gets line-broken later
         # remove text in square brackets
         line = re.sub(r"\[.*?\]", "", line)
         # remove double-quotes
@@ -100,6 +106,8 @@ def process_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     # remove space before n't, 'll and so on
     text = re.sub(rf"([a-z])\s+({CONTRACTIONS})\b", r"\1\2", text)
+    # remove the space between gon na, wan na
+    text = re.sub(r"(gon|wan)\s+na\b", r"\1na", text)
     return text
 
 
@@ -118,10 +126,10 @@ def get_lines(
 def process_file(
     file: typing.Union[str, Path], disable_tqdm: bool = False
 ) -> typing.Iterable[str]:
-    lines = get_lines(file, disable_tqdm=disable_tqdm)
-    lines = augment_lines(lines, disable_tqdm=disable_tqdm)
-    lines = split_lines(lines, disable_tqdm=disable_tqdm)
-    lines = filter_and_fix_lines(lines, disable_tqdm=disable_tqdm)
+    lines = get_lines(file, disable_tqdm=True)
+    lines = augment_lines(lines, disable_tqdm=True)
+    lines = split_lines(lines, disable_tqdm=True)
+    lines = filter_and_fix_lines(lines, disable_tqdm=True)
     for line in tqdm(lines, desc="Processing text", disable=disable_tqdm):
         yield process_text(line)
 
@@ -134,33 +142,43 @@ def preprocess_files(
     files = list(Path(input_folder).rglob("*.txt"))
     output_file = Path(output_file)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
-        with open(output_file, "at", encoding="utf-8") as f:
+    with open(output_file, "at", encoding="utf-8") as f:
+        for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
             for line in process_file(file, disable_tqdm=True):
                 f.write(line + "\n")
     return output_file
 
 
 def create_arpa(
-    text_file: typing.Union[str, Path], arpa_path: typing.Union[str, Path], n
+    text_file: typing.Union[str, Path],
+    arpa_path: typing.Union[str, Path],
+    n,
+    kenlm_bin_path: typing.Union[str, Path],
 ) -> None:
-    flag = os.system(f"./kenlm/build/bin/lmplz -o {n} <{text_file} >{arpa_path}")
+    cmd_path = Path(kenlm_bin_path) / "lmplz"
+    cmd_str = f"{cmd_path} -o {n} <{text_file} >{arpa_path}"
+    flag = os.system(cmd_str)
     if flag != 0:
-        raise ValueError("Error in creating ARPA file")
+        raise ValueError(f"Error in creating ARPA file (cmd: {cmd_str})")
 
 
 def create_binary(
-    arpa_path: typing.Union[str, Path], binary_path: typing.Union[str, Path]
+    arpa_path: typing.Union[str, Path],
+    binary_path: typing.Union[str, Path],
+    kenlm_bin_path: typing.Union[str, Path],
 ) -> None:
-    flag = os.system(f"./kenlm/build/bin/build_binary {arpa_path} {binary_path}")
+    cmd_path = Path(kenlm_bin_path) / "build_binary"
+    cmd_str = f"{cmd_path} {arpa_path} {binary_path}"
+    flag = os.system(cmd_str)
     if flag != 0:
-        raise ValueError("Error in creating binary file")
+        raise ValueError(f"Error in creating binary file (cmd: {cmd_str})")
 
 
 def create_arpa_and_binary(
     text_file: typing.Union[str, Path],
     output_folder: typing.Union[str, Path],
     n: int,
+    kenlm_bin_path: typing.Union[str, Path],
     all_up_to: bool = False,
 ) -> None:
     text_file = Path(text_file)
@@ -173,27 +191,17 @@ def create_arpa_and_binary(
         for k in range(2, n + 1):
             arpa_path = arpa_folder / Path(text_file.stem + f"_{k}.arpa")
             binary_path = binary_folder / Path(text_file.stem + f"_{k}.binary")
-            create_arpa(text_file, arpa_path, k)
-            create_binary(arpa_path, binary_path)
+            create_arpa(text_file, arpa_path, k, kenlm_bin_path)
+            create_binary(arpa_path, binary_path, kenlm_bin_path)
     else:
         arpa_path = arpa_folder / Path(text_file.stem + f"_{n}.arpa")
         binary_path = binary_folder / Path(text_file.stem + f"_{n}.binary")
-        create_arpa(text_file, arpa_path, n)
-        create_binary(arpa_path, binary_path)
+        create_arpa(text_file, arpa_path, n, kenlm_bin_path)
+        create_binary(arpa_path, binary_path, kenlm_bin_path)
 
 
-def create_ngram(
-    arpa: typing.Union[str, Path],
-    binary: typing.Union[str, Path],
-    output_file: typing.Union[str, Path],
-    disable_tqdm: bool = False,
-) -> None:
+def read_ngrams(arpa: typing.Union[str, Path]) -> typing.Iterable[NGram]:
     arpa_path = Path(arpa)
-    binary_path = Path(binary)
-    ngram_path = Path(output_file)
-    ngram_path.parent.mkdir(parents=True, exist_ok=True)
-
-    t = tqdm(desc="Reading ngrams", disable=disable_tqdm)
     with open(arpa_path, "rt", encoding="utf-8") as f:
         f.readline()
         line = f.readline()
@@ -208,17 +216,26 @@ def create_ngram(
                 break
 
         # read the ngrams
-        ngrams = []
         while True:
             split_line = f.readline().split()
             if not split_line:
                 break
             _, *tokens = split_line
-            ngrams.append(NGram(tokens=tokens))
-            t.update()
-    t.close()
+            yield NGram(tokens=tokens)
+
+
+def create_ngram(
+    arpa: typing.Union[str, Path],
+    binary: typing.Union[str, Path],
+    output_file: typing.Union[str, Path],
+    disable_tqdm: bool = False,
+) -> None:
+    binary_path = Path(binary)
+    ngram_path = Path(output_file)
+    ngram_path.parent.mkdir(parents=True, exist_ok=True)
 
     m = Model(binary_path)
+    ngrams = read_ngrams(arpa)
     scored_ngrams = [
         (ngram, m.freq_per_mil(ngram)[0])
         for ngram in tqdm(
@@ -240,12 +257,10 @@ def create_model_files(
     processed_corpora_folder: typing.Union[str, Path],
     model_output_folder: typing.Union[str, Path],
     n,
+    kenlm_bin_path: typing.Union[str, Path],
     filestem: str = "all_corpora",
     all_up_to=True,
 ) -> None:
-    class Processing(Object):
-        pass
-
     input_folder = Path(input_folder)
     text_file = Path(processed_corpora_folder) / Path(filestem + ".txt")
     arpa_file = Path(model_output_folder) / "arpa" / Path(filestem + ".arpa")
@@ -254,7 +269,7 @@ def create_model_files(
 
     preprocess_files(input_folder, text_file)
     Processing.info(f"Preprocessed text saved to {text_file}.")
-    create_arpa_and_binary(text_file, model_output_folder, n, all_up_to)
+    create_arpa_and_binary(text_file, model_output_folder, n, kenlm_bin_path, all_up_to)
     Processing.info(f"ARPA and binary files saved to {model_output_folder}.")
     if all_up_to:
         for k in range(2, n + 1):
