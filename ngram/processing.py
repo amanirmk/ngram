@@ -29,27 +29,28 @@ def augment_lines(
         # remove cornell movie dialogues metadata
         if "+++$+++" in line:
             line = line.split("+++$+++")[-1]
-        # replace unicode quotes with ascii quotes (i think this might not actually occur)
+        # replace unicode quotes with ascii quotes (i think this might not actually occur anymore)
         line = re.sub(r"‘|’", "'", line)
         line = re.sub(r"“|”", '"', line)
-        # remove anything beginning with "@" (metadata)
-        line = re.sub(r"@\S*", "-", line)  # "-" so it gets line-broken later
-        # remove text in square brackets
-        line = re.sub(r"\[.*?\]", "", line)
-        # remove double-quotes
-        line = re.sub(r'"', "", line)
         # remove hyphens (in words like "well-known")
         line = re.sub(r"(\w+)-(\w+)", r"\1\2", line)
+        # remove anything beginning with "@" (metadata)
+        line = re.sub(r"@\S*", " - ", line)  # "-" so it gets line-broken later
+        # remove text in square brackets or parentheses
+        line = re.sub(r"\[.*?\]", "", line)
+        line = re.sub(r"\(.*?\)", "", line)
+        # remove double-quotes
+        line = re.sub(r'"', "", line)
         # turn ".!" into "!"
         line = re.sub(r"\.!", r"!", line)
         # remove space between "7: 30" and so on
         line = re.sub(r"(\d+):\s+(\d+)", r"\1:\2", line)
-        # remove spaces before punctuation
-        line = re.sub(rf"\s+({ALL_PUNC})", r"\1", line)
         # remove space before n't, 'll and so on
-        line = re.sub(rf"([a-zA-Z])\s+({CONTRACTIONS})\b", r"\1\2", line, re.IGNORECASE)
+        line = re.sub(rf"([a-z])\s+({CONTRACTIONS})\b", r"\1\2", line, re.IGNORECASE)
         # remove the space between gon na, wan na
         line = re.sub(r"(gon|wan)\s+na\b", r"\1na", line, re.IGNORECASE)
+        # remove spaces before punctuation
+        line = re.sub(rf"\s+({ALL_PUNC})", r"\1", line)
         # replace multiple spaces with a single space
         line = re.sub(r"\s+", " ", line)
         yield line
@@ -59,7 +60,7 @@ def split_lines(
     lines: typing.Iterable[str], disable_tqdm: bool = False
 ) -> typing.Iterable[str]:
     for line in tqdm(lines, desc="Splitting lines", disable=disable_tqdm):
-        for split_line in re.split(rf"(.*?(?:{LINE_ENDING}|{LINE_SEPARATION})) ", line):
+        for split_line in re.split(rf"(.*?(?:{LINE_ENDING}|{LINE_SEPARATION}))", line):
             yield split_line
 
 
@@ -82,13 +83,18 @@ def filter_and_fix_lines(
             continue
         # remove 'voice-over' from line (cornell movies)
         line = re.sub(r"Voice-over", "", line)
-        # remove all lingering separation symbols
+        # remove any lingering separation symbols
         line = re.sub(LINE_SEPARATION, "", line)
         # add period to end of line if no punctuation
         if not re.match(LINE_ENDING, line[-1]):
             line += "."
+        # some weird cases (just bad data) where a contraction starts the line
+        if re.match(rf"({CONTRACTIONS})\b", line, re.IGNORECASE):
+            continue
+        # capture any missing cases (not totally sure why they exist)
+        line = re.sub(rf"([a-z])\s+({CONTRACTIONS})\b", r"\1\2", line, re.IGNORECASE)
         # must be at least 5 words and no more than 50
-        if not 5 <= len(re.findall(r"\w+", line)) <= 50:
+        if not 5 <= len(re.findall(r"\w+(?:'\w+)?", line)) <= 50:
             continue
 
         line = line.strip()
@@ -130,7 +136,9 @@ def process_file(
     lines = augment_lines(lines, disable_tqdm=True)
     lines = split_lines(lines, disable_tqdm=True)
     lines = filter_and_fix_lines(lines, disable_tqdm=True)
+    # ^stop here for simply cleaned data (capitalization and some punctuation kept)
     for line in tqdm(lines, desc="Processing text", disable=disable_tqdm):
+        # final processing for ngram model
         yield process_text(line)
 
 
