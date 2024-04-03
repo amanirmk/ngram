@@ -1,12 +1,11 @@
 import typing
 from pydantic import BaseModel
 from ngram.abstract import Object
-from ngram.tokenizer import Tokenizer
 
 
 class StimulusPair(BaseModel):
-    s1: str
-    s2: str
+    high_item: str
+    low_item: str
 
 
 class NGram(Object):
@@ -16,15 +15,22 @@ class NGram(Object):
         tokens: typing.Optional[typing.Iterable[str]] = None,
         last_n=0,
     ):
+        # avoiding circular import
+        from ngram.processing import tokenize
+
         assert (text or tokens) and not (
             text and tokens
         ), "Text or tokens must be provided, and not both"
         if text:
-            self._tokens = tuple(Tokenizer()(text)[-last_n:])
+            self._tokens = tuple(tokenize(text)[-last_n:])
         else:
             self._tokens = tuple(tokens[-last_n:])  # type: ignore[index]
         self._n = len(self._tokens)
         self._text = " ".join(self._tokens)
+        if self._n == 0 or self._text == "":
+            raise ValueError(
+                f"No tokens found: input={text or tokens}, output={self._tokens}"
+            )
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._text})"
