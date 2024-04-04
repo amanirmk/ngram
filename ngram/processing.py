@@ -162,9 +162,12 @@ def create_arpa(
     arpa_path: typing.Union[str, Path],
     n,
     kenlm_bin_path: typing.Union[str, Path],
+    prune: bool = True,
 ) -> None:
     cmd_path = Path(kenlm_bin_path) / "lmplz"
-    cmd_str = f"{cmd_path} -o {n} <{text_file} >{arpa_path}"
+    cmd_str = (
+        f"{cmd_path} -o {n} {'--prune 0 1 ' if prune else ''}<{text_file} >{arpa_path}"
+    )
     flag = os.system(cmd_str)
     if flag != 0:
         raise ValueError(f"Error in creating ARPA file (cmd: {cmd_str})")
@@ -188,6 +191,7 @@ def create_arpa_and_binary(
     n: int,
     kenlm_bin_path: typing.Union[str, Path],
     all_up_to: bool = False,
+    prune: bool = True,
 ) -> None:
     text_file = Path(text_file)
     arpa_folder = Path(output_folder) / "arpa"
@@ -199,16 +203,18 @@ def create_arpa_and_binary(
         for k in range(2, n + 1):
             arpa_path = arpa_folder / Path(text_file.stem + f"_{k}.arpa")
             binary_path = binary_folder / Path(text_file.stem + f"_{k}.binary")
-            create_arpa(text_file, arpa_path, k, kenlm_bin_path)
+            create_arpa(text_file, arpa_path, k, kenlm_bin_path, prune=prune)
             create_binary(arpa_path, binary_path, kenlm_bin_path)
     else:
         arpa_path = arpa_folder / Path(text_file.stem + f"_{n}.arpa")
         binary_path = binary_folder / Path(text_file.stem + f"_{n}.binary")
-        create_arpa(text_file, arpa_path, n, kenlm_bin_path)
+        create_arpa(text_file, arpa_path, n, kenlm_bin_path, prune=prune)
         create_binary(arpa_path, binary_path, kenlm_bin_path)
 
 
-def read_ngrams(arpa: typing.Union[str, Path]) -> typing.Iterable[NGram]:
+def read_ngrams(
+    arpa: typing.Union[str, Path], get_unigram: bool = False
+) -> typing.Iterable[NGram]:
     arpa_path = Path(arpa)
     with open(arpa_path, "rt", encoding="utf-8") as f:
         f.readline()
@@ -218,6 +224,8 @@ def read_ngrams(arpa: typing.Union[str, Path]) -> typing.Iterable[NGram]:
             n = int(line.split()[1][0])
             line = f.readline()
 
+        if get_unigram:
+            n = 1
         # find start of the ngrams
         while True:
             if f"{n}-grams" in f.readline():
@@ -229,6 +237,8 @@ def read_ngrams(arpa: typing.Union[str, Path]) -> typing.Iterable[NGram]:
             if not split_line:
                 break
             _, *tokens = split_line
+            if get_unigram:
+                tokens = tokens[:1]
             yield NGram(tokens=tokens)
 
 
@@ -237,13 +247,14 @@ def create_ngram(
     binary: typing.Union[str, Path],
     output_file: typing.Union[str, Path],
     disable_tqdm: bool = False,
+    get_unigram: bool = False,
 ) -> None:
     binary_path = Path(binary)
     ngram_path = Path(output_file)
     ngram_path.parent.mkdir(parents=True, exist_ok=True)
 
     m = Model(binary_path)
-    ngrams = read_ngrams(arpa)
+    ngrams = read_ngrams(arpa, get_unigram=get_unigram)
     scored_ngrams = [
         (ngram, m.freq_per_mil(ngram)[0])
         for ngram in tqdm(
@@ -266,8 +277,10 @@ def create_model_files(
     model_output_folder: typing.Union[str, Path],
     n,
     kenlm_bin_path: typing.Union[str, Path],
+    proxy_n_for_unigram: typing.Optional[int] = None,
     filestem: str = "all_corpora",
-    all_up_to=True,
+    all_up_to: bool = True,
+    prune: bool = True,
 ) -> None:
     input_folder = Path(input_folder)
     text_file = Path(processed_corpora_folder) / Path(filestem + ".txt")
@@ -275,11 +288,29 @@ def create_model_files(
     binary_file = Path(model_output_folder) / "bin" / Path(filestem + ".binary")
     ngram_file = Path(model_output_folder) / "ngram" / Path(filestem + ".ngram")
 
+    if n == 1:
+        assert (
+            proxy_n_for_unigram is not None
+        ), "proxy_n_for_unigram must be provided if only creating unigram model"
+
     preprocess_files(input_folder, text_file)
     Processing.info(f"Preprocessed text saved to {text_file}.")
-    create_arpa_and_binary(text_file, model_output_folder, n, kenlm_bin_path, all_up_to)
+    create_arpa_and_binary(
+        text_file,
+        model_output_folder,
+        proxy_n_for_unigram if n == 1 else n,
+        kenlm_bin_path,
+        all_up_to,
+        prune=prune,
+    )
     Processing.info(f"ARPA and binary files saved to {model_output_folder}.")
     if all_up_to:
+        create_ngram(
+            arpa_file.parent / Path(arpa_file.stem + f"_2.arpa"),
+            binary_file.parent / Path(binary_file.stem + f"_2.binary"),
+            ngram_file.parent / Path(ngram_file.stem + f"_1.ngram"),
+            get_unigram=True,
+        )
         for k in range(2, n + 1):
             create_ngram(
                 arpa_file.parent / Path(arpa_file.stem + f"_{k}.arpa"),
@@ -288,8 +319,11 @@ def create_model_files(
             )
     else:
         create_ngram(
-            arpa_file.parent / Path(arpa_file.stem + f"_{n}.arpa"),
-            binary_file.parent / Path(binary_file.stem + f"_{n}.binary"),
+            arpa_file.parent
+            / Path(arpa_file.stem + f"_{proxy_n_for_unigram if n==1 else n}.arpa"),
+            binary_file.parent
+            / Path(binary_file.stem + f"_{proxy_n_for_unigram if n==1 else n}.binary"),
             ngram_file.parent / Path(ngram_file.stem + f"_{n}.ngram"),
+            get_unigram=n == 1,
         )
     Processing.info(f"NGram files saved to {ngram_file.parent}.")
