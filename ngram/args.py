@@ -5,6 +5,8 @@ import typing
 @dataclasses.dataclass
 class Arguments:
     action: typing.Optional[str] = dataclasses.field(default="process")
+
+    # arguments for action=process
     original_corpora: typing.Optional[str] = dataclasses.field(
         default="./data/test_corpora",
     )
@@ -18,8 +20,10 @@ class Arguments:
     kenlm_bin_path: typing.Optional[str] = dataclasses.field(
         default="./kenlm/build/bin",
     )
+    max_n: typing.Optional[int] = dataclasses.field(default=2)
+    all_up_to: typing.Optional[bool] = dataclasses.field(default=False)
+
+    # arguments for action=analyze
     stimuli: typing.Optional[str] = dataclasses.field(
         default="./data/stimuli",
     )
-    max_n: typing.Optional[int] = dataclasses.field(default=2)
-    all_up_to: typing.Optional[bool] = dataclasses.field(default=False)

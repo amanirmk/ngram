@@ -1,4 +1,5 @@
 import typing
+from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -14,15 +15,71 @@ class Analyze(Object):
 
 
 def get_percentiles(
-    ngram_file: typing.Union[str, Path], num: int = 400
+    ngram_file: typing.Union[str, Path],
+    num: int = 400,
+    min_fpm: float = 0,
+    exclude_bos: bool = True,
+    exclude_eos: bool = True,
 ) -> typing.Tuple[np.ndarray, np.ndarray]:
     freqs = []
     with open(ngram_file, "rt", encoding="utf-8") as f:
-        for line in f:
-            freqs.append(float(line.split()[0]))
+        for line in tqdm(f, desc="Loading percentiles"):
+            freq, *tokens = line.split()
+            if exclude_bos and tokens[0] == "<s>":
+                continue
+            if exclude_eos and tokens[-1] == "</s>":
+                continue
+            freqs.append(float(freq))
     np_freqs = np.array(freqs)
+    np_freqs = np_freqs[np_freqs >= min_fpm]
     pctiles = np.linspace(0, 100, num=num)
     pctile_vals = np.percentile(np_freqs, pctiles)
+    return pctile_vals, pctiles
+
+
+def get_diff_percentiles(
+    ngram_file: typing.Union[str, Path],
+    num_bins: int = 10000,
+    min_fpm: float = 0,
+    exclude_bos: bool = True,
+    exclude_eos: bool = True,
+) -> typing.Tuple[np.ndarray, np.ndarray]:
+    freqs = []
+    with open(ngram_file, "rt", encoding="utf-8") as f:
+        for line in tqdm(f, desc="Loading percentiles"):
+            freq, *tokens = line.split()
+            if exclude_bos and tokens[0] == "<s>":
+                continue
+            if exclude_eos and tokens[-1] == "</s>":
+                continue
+            freqs.append(float(freq))
+    np_freqs = np.array(freqs)
+    np_freqs = np_freqs[np_freqs >= min_fpm]
+    logfreqs = np.log10(np_freqs)  # lognormal data, so better bins
+    # divide into equal sized bins
+    bin_cnts, bin_edges = np.histogram(logfreqs, bins=num_bins)
+    # use center for bin estimate
+    bin_vals = (bin_edges[:-1] + bin_edges[1:]) / 2
+    hist = np.stack((bin_cnts, bin_vals), axis=1)
+    # compute difference distribution based on binned estimates
+    diff_cnts: typing.Dict[float, int] = defaultdict(int)
+    for i in tqdm(range(len(hist)), desc="Computing diff percentiles"):
+        cnt1, val1 = hist[i]
+        # same bin, so just N choose 2 counts of 0 diff
+        diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
+        for j in range(i + 1, len(hist)):
+            cnt2, val2 = hist[j]
+            # for diff bins, N1 * N2 counts of diff
+            # measure diff in freq space, not log space
+            diff_cnts[abs(10**val1 - 10**val2)] += int(cnt1 * cnt2)
+    # compute percentiles
+    diffs = np.array(list(diff_cnts.keys()))
+    counts = np.array(list(diff_cnts.values()))
+    sorted_indices = np.argsort(diffs)
+    sorted_counts = counts[sorted_indices]
+    cumulative_counts = np.cumsum(sorted_counts)
+    pctiles = cumulative_counts / np.sum(sorted_counts) * 100
+    pctile_vals = diffs[sorted_indices]
     return pctile_vals, pctiles
 
 
@@ -122,17 +179,13 @@ def analyze_single_stimulus_with_multiple_models(
     bos: bool = False,
     eos: bool = False,
 ) -> typing.Dict[str, typing.Any]:
-    tokenized_stimulus = process_text(stimulus)
-    if bos:
-        tokenized_stimulus = models[0].BOS + " " + tokenized_stimulus
-    if eos:
-        tokenized_stimulus += " " + models[0].EOS
-
+    tmp = process_text(stimulus)
+    tokenized_stimulus = (models[0].BOS + " ") * bos + tmp + (" " + models[0].EOS) * eos
     results: typing.Dict[str, typing.Any] = {
         "stimulus": stimulus,
         "tokenized_stimulus": tokenized_stimulus,
     }
-    if tokenized_stimulus == "":
+    if tmp == "":
         Analyze.warn(f"Tokenization left no stimulus text: {stimulus}")
         return results
     if include_unigram:
@@ -143,7 +196,7 @@ def analyze_single_stimulus_with_multiple_models(
             results, partial_results, percentile_dict, 1
         )
     for model in models:
-        partial_results = analyze_single_stimulus_with_unigram(
+        partial_results = analyze_single_stimulus_with_model(
             stimulus, model, bos=bos, eos=eos
         )
         results = add_single_stimulus_results(
@@ -160,10 +213,13 @@ def analyze_single_stimuli_data(
     bos: bool = False,
     eos: bool = False,
 ) -> pd.DataFrame:
-    models = [Model(file) for file in binary_files]
+    models = [Model(file) for file in tqdm(binary_files, desc="Loading models")]
     if ngram_files:
         percentile_dict = {
-            int(Path(f).stem[-1]): get_percentiles(f) for f in ngram_files
+            int(Path(f).stem[-1]): get_percentiles(
+                f, exclude_bos=not bos, exclude_eos=not eos
+            )
+            for f in ngram_files
         }
     else:
         percentile_dict = {}
@@ -181,20 +237,23 @@ def add_stimuli_pair_results(
     results,
     analyze_output: typing.Tuple[float, bool, float, float],
     percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
     k: int,
 ):
     diff, both_in_vocab, fpm1, fpm2 = analyze_output
-    results[f"final_freq1_{k}"] = fpm1
-    results[f"final_freq2_{k}"] = fpm2
+    results[f"high_item_final_freq_{k}"] = fpm1
+    results[f"low_item_final_freq_{k}"] = fpm2
     results[f"final_freq_diff_{k}"] = diff
     results[f"both_in_vocab_{k}"] = both_in_vocab
-    if k in percentile_dict:
+    if k in diff_percentile_dict:
         pctile1 = percentile(fpm1, *percentile_dict[k])
         pctile2 = percentile(fpm2, *percentile_dict[k])
-        results[f"final_percentile1_{k}"] = pctile1
-        results[f"final_percentile2_{k}"] = pctile2
+        results[f"high_item_final_percentile_{k}"] = pctile1
+        results[f"low_item_final_percentile_{k}"] = pctile2
         results[f"final_percentile_diff_{k}"] = abs(pctile1 - pctile2)
-        results[f"final_percentile_expdiff_{k}"] = abs(10**pctile1 - 10**pctile2)
+        results[f"final_diff_percentile_{k}"] = percentile(
+            diff, *diff_percentile_dict[k]
+        )  # this is the main measure one should use
     return results
 
 
@@ -202,6 +261,7 @@ def analyze_stimuli_pair_with_models(
     pair: StimulusPair,
     models: typing.List[Model],
     percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
     include_unigram: bool = True,
 ) -> typing.Dict[str, typing.Any]:
     high_item_tokenized = process_text(pair.high_item)
@@ -219,11 +279,17 @@ def analyze_stimuli_pair_with_models(
         return results
     if include_unigram:
         partial_results = models[0].final_ngram_diff(pair, n=1)
-        results = add_stimuli_pair_results(results, partial_results, percentile_dict, 1)
+        results = add_stimuli_pair_results(
+            results, partial_results, percentile_dict, diff_percentile_dict, 1
+        )
     for model in models:
         partial_results = model.final_ngram_diff(pair, n=model._order)
         results = add_stimuli_pair_results(
-            results, partial_results, percentile_dict, model._order
+            results,
+            partial_results,
+            percentile_dict,
+            diff_percentile_dict,
+            model._order,
         )
     return results
 
@@ -234,10 +300,13 @@ def analyze_stimuli_pair_data(
     ngram_files: typing.Optional[typing.List[typing.Union[str, Path]]] = None,
     csv_file: typing.Union[Path, str] = "results.csv",
 ):
-    models = [Model(file) for file in binary_files]
+    models = [Model(file) for file in tqdm(binary_files, desc="Loading models")]
     if ngram_files:
         percentile_dict = {
             int(Path(f).stem[-1]): get_percentiles(f) for f in ngram_files
+        }
+        diff_percentile_dict = {
+            int(Path(f).stem[-1]): get_diff_percentiles(f) for f in ngram_files
         }
     else:
         percentile_dict = {}
@@ -245,7 +314,10 @@ def analyze_stimuli_pair_data(
     for pair in tqdm(pairs, desc="Analyzing pairs"):
         results.append(
             analyze_stimuli_pair_with_models(
-                pair, models, percentile_dict=percentile_dict
+                pair,
+                models,
+                percentile_dict=percentile_dict,
+                diff_percentile_dict=diff_percentile_dict,
             )
         )
     pd.DataFrame(results).to_csv(csv_file)
