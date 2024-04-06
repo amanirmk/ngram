@@ -162,12 +162,19 @@ def create_arpa(
     arpa_path: typing.Union[str, Path],
     n,
     kenlm_bin_path: typing.Union[str, Path],
+    kenlm_tmp_path: typing.Optional[typing.Union[str, Path]] = None,
+    kenlm_ram_limit_mb: typing.Optional[int] = None,
     prune: bool = True,
 ) -> None:
     cmd_path = Path(kenlm_bin_path) / "lmplz"
-    cmd_str = (
-        f"{cmd_path} -o {n} {'--prune 0 1 ' if prune else ''}<{text_file} >{arpa_path}"
-    )
+    cmd_str = f"{cmd_path} -o {n}"
+    if kenlm_tmp_path is not None:
+        cmd_str += f" -T {kenlm_tmp_path}"
+    if kenlm_ram_limit_mb is not None:
+        cmd_str += f" -S {kenlm_ram_limit_mb}M"
+    if prune:
+        cmd_str += " --prune 0 1"
+    cmd_str += f" <{text_file} >{arpa_path}"
     flag = os.system(cmd_str)
     if flag != 0:
         raise ValueError(f"Error in creating ARPA file (cmd: {cmd_str})")
@@ -187,15 +194,17 @@ def create_binary(
 
 def create_arpa_and_binary(
     text_file: typing.Union[str, Path],
-    output_folder: typing.Union[str, Path],
+    model_output_folder: typing.Union[str, Path],
     n: int,
     kenlm_bin_path: typing.Union[str, Path],
+    kenlm_tmp_path: typing.Union[str, Path],
+    kenlm_ram_limit_mb: typing.Optional[int] = None,
     all_up_to: bool = False,
     prune: bool = True,
 ) -> None:
     text_file = Path(text_file)
-    arpa_folder = Path(output_folder) / "arpa"
-    binary_folder = Path(output_folder) / "bin"
+    arpa_folder = Path(model_output_folder) / "arpa"
+    binary_folder = Path(model_output_folder) / "bin"
     arpa_folder.mkdir(parents=True, exist_ok=True)
     binary_folder.mkdir(parents=True, exist_ok=True)
 
@@ -203,13 +212,35 @@ def create_arpa_and_binary(
         for k in range(2, n + 1):
             arpa_path = arpa_folder / Path(text_file.stem + f"_{k}.arpa")
             binary_path = binary_folder / Path(text_file.stem + f"_{k}.binary")
-            create_arpa(text_file, arpa_path, k, kenlm_bin_path, prune=prune)
-            create_binary(arpa_path, binary_path, kenlm_bin_path)
+            create_arpa(
+                text_file=text_file,
+                arpa_path=arpa_path,
+                n=k,
+                kenlm_bin_path=kenlm_bin_path,
+                kenlm_tmp_path=kenlm_tmp_path,
+                kenlm_ram_limit_mb=kenlm_ram_limit_mb,
+                prune=prune,
+            )
+            create_binary(
+                arpa_path=arpa_path,
+                binary_path=binary_path,
+                kenlm_bin_path=kenlm_bin_path,
+            )
     else:
         arpa_path = arpa_folder / Path(text_file.stem + f"_{n}.arpa")
         binary_path = binary_folder / Path(text_file.stem + f"_{n}.binary")
-        create_arpa(text_file, arpa_path, n, kenlm_bin_path, prune=prune)
-        create_binary(arpa_path, binary_path, kenlm_bin_path)
+        create_arpa(
+            text_file=text_file,
+            arpa_path=arpa_path,
+            n=n,
+            kenlm_bin_path=kenlm_bin_path,
+            kenlm_tmp_path=kenlm_tmp_path,
+            kenlm_ram_limit_mb=kenlm_ram_limit_mb,
+            prune=prune,
+        )
+        create_binary(
+            arpa_path=arpa_path, binary_path=binary_path, kenlm_bin_path=kenlm_bin_path
+        )
 
 
 def read_ngrams(
@@ -277,6 +308,8 @@ def create_model_files(
     model_output_folder: typing.Union[str, Path],
     n,
     kenlm_bin_path: typing.Union[str, Path],
+    kenlm_tmp_path: typing.Union[str, Path],
+    kenlm_ram_limit_mb: typing.Optional[int] = None,
     proxy_n_for_unigram: typing.Optional[int] = None,
     filestem: str = "all_corpora",
     all_up_to: bool = True,
@@ -296,11 +329,13 @@ def create_model_files(
     preprocess_files(input_folder, text_file)
     Processing.info(f"Preprocessed text saved to {text_file}.")
     create_arpa_and_binary(
-        text_file,
-        model_output_folder,
-        proxy_n_for_unigram if n == 1 else n,
-        kenlm_bin_path,
-        all_up_to,
+        text_file=text_file,
+        model_output_folder=model_output_folder,
+        n=(proxy_n_for_unigram if n == 1 else n),
+        kenlm_bin_path=kenlm_bin_path,
+        kenlm_tmp_path=kenlm_tmp_path,
+        kenlm_ram_limit_mb=kenlm_ram_limit_mb,
+        all_up_to=all_up_to,
         prune=prune,
     )
     Processing.info(f"ARPA and binary files saved to {model_output_folder}.")
