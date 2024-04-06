@@ -18,13 +18,17 @@ def main() -> None:
             f"Building model files {'up to' if args.all_up_to else 'for'} n={args.max_n}."
         )
         create_model_files(
-            args.original_corpora,
-            args.processed_corpora,
-            args.model_files,
-            args.max_n,
-            args.kenlm_bin_path,
-            args.processed_filestem,
-            args.all_up_to,
+            input_folder=args.original_corpora,
+            processed_corpora_folder=args.processed_corpora,
+            model_output_folder=args.model_files,
+            n=args.max_n,
+            kenlm_bin_path=args.kenlm_bin_path,
+            kenlm_tmp_path=args.kenlm_tmp_path,
+            kenlm_ram_limit_mb=args.kenlm_ram_limit_mb,
+            proxy_n_for_unigram=(2 if args.max_n == 1 else None),
+            filestem=args.processed_filestem,
+            all_up_to=args.all_up_to,
+            prune=args.prune,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")
