@@ -277,8 +277,8 @@ def create_ngram(
     arpa: typing.Union[str, Path],
     binary: typing.Union[str, Path],
     output_file: typing.Union[str, Path],
-    disable_tqdm: bool = False,
     get_unigram: bool = False,
+    disable_tqdm: bool = False,
 ) -> None:
     binary_path = Path(binary)
     ngram_path = Path(output_file)
@@ -314,6 +314,7 @@ def create_model_files(
     filestem: str = "all_corpora",
     all_up_to: bool = True,
     prune: bool = True,
+    disable_tqdm: bool = False,
 ) -> None:
     input_folder = Path(input_folder)
     text_file = Path(processed_corpora_folder) / Path(filestem + ".txt")
@@ -326,7 +327,7 @@ def create_model_files(
             proxy_n_for_unigram is not None
         ), "proxy_n_for_unigram must be provided if only creating unigram model"
 
-    preprocess_files(input_folder, text_file)
+    preprocess_files(input_folder, text_file, disable_tqdm=disable_tqdm)
     Processing.info(f"Preprocessed text saved to {text_file}.")
     create_arpa_and_binary(
         text_file=text_file,
@@ -345,12 +346,14 @@ def create_model_files(
             binary_file.parent / Path(binary_file.stem + f"_2.binary"),
             ngram_file.parent / Path(ngram_file.stem + f"_1.ngram"),
             get_unigram=True,
+            disable_tqdm=disable_tqdm,
         )
         for k in range(2, n + 1):
             create_ngram(
                 arpa_file.parent / Path(arpa_file.stem + f"_{k}.arpa"),
                 binary_file.parent / Path(binary_file.stem + f"_{k}.binary"),
                 ngram_file.parent / Path(ngram_file.stem + f"_{k}.ngram"),
+                disable_tqdm=disable_tqdm,
             )
     else:
         create_ngram(
@@ -360,5 +363,6 @@ def create_model_files(
             / Path(binary_file.stem + f"_{proxy_n_for_unigram if n==1 else n}.binary"),
             ngram_file.parent / Path(ngram_file.stem + f"_{n}.ngram"),
             get_unigram=n == 1,
+            disable_tqdm=disable_tqdm,
         )
     Processing.info(f"NGram files saved to {ngram_file.parent}.")
