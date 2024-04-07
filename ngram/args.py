@@ -25,6 +25,7 @@ class Arguments:
     max_n: typing.Optional[int] = dataclasses.field(default=4)
     all_up_to: typing.Optional[bool] = dataclasses.field(default=True)
     prune: typing.Optional[bool] = dataclasses.field(default=True)
+    disable_tqdm: typing.Optional[bool] = dataclasses.field(default=False)
 
     # arguments for action=analyze
     stimuli: typing.Optional[str] = dataclasses.field(
