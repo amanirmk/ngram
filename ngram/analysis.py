@@ -1,11 +1,12 @@
 import typing
+from itertools import combinations
 from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from ngram.model import Model
-from ngram.processing import process_text
+from ngram.processing import process_text, read_ngram_file
 from ngram.datatypes import StimulusPair
 from ngram.abstract import Object
 
@@ -20,20 +21,22 @@ def get_percentiles(
     min_fpm: float = 0,
     exclude_bos: bool = True,
     exclude_eos: bool = True,
+    disable_tqdm: bool = False,
 ) -> typing.Tuple[np.ndarray, np.ndarray]:
-    freqs = []
-    with open(ngram_file, "rt", encoding="utf-8") as f:
-        for line in tqdm(f, desc="Loading percentiles"):
-            freq, *tokens = line.split()
-            if exclude_bos and tokens[0] == "<s>":
-                continue
-            if exclude_eos and tokens[-1] == "</s>":
-                continue
-            freqs.append(float(freq))
-    np_freqs = np.array(freqs)
-    np_freqs = np_freqs[np_freqs >= min_fpm]
+    freqs = np.array(
+        list(
+            read_ngram_file(
+                ngram_file=ngram_file,
+                min_fpm=min_fpm,
+                only_freqs=True,
+                exclude_bos=exclude_bos,
+                exclude_eos=exclude_eos,
+                disable_tqdm=disable_tqdm,
+            )
+        )
+    )
     pctiles = np.linspace(0, 100, num=num)
-    pctile_vals = np.percentile(np_freqs, pctiles)
+    pctile_vals = np.percentile(freqs, pctiles)
     return pctile_vals, pctiles
 
 
@@ -43,19 +46,21 @@ def get_diff_percentiles(
     min_fpm: float = 0,
     exclude_bos: bool = True,
     exclude_eos: bool = True,
+    disable_tqdm: bool = False,
 ) -> typing.Tuple[np.ndarray, np.ndarray]:
-    freqs = []
-    with open(ngram_file, "rt", encoding="utf-8") as f:
-        for line in tqdm(f, desc="Loading percentiles"):
-            freq, *tokens = line.split()
-            if exclude_bos and tokens[0] == "<s>":
-                continue
-            if exclude_eos and tokens[-1] == "</s>":
-                continue
-            freqs.append(float(freq))
-    np_freqs = np.array(freqs)
-    np_freqs = np_freqs[np_freqs >= min_fpm]
-    logfreqs = np.log10(np_freqs)  # lognormal data, so better bins
+    freqs = np.array(
+        list(
+            read_ngram_file(
+                ngram_file=ngram_file,
+                min_fpm=min_fpm,
+                only_freqs=True,
+                exclude_bos=exclude_bos,
+                exclude_eos=exclude_eos,
+                disable_tqdm=disable_tqdm,
+            )
+        )
+    )
+    logfreqs = np.log10(freqs)  # lognormal data, so better bins
     # divide into equal sized bins
     bin_cnts, bin_edges = np.histogram(logfreqs, bins=num_bins)
     # use center for bin estimate
@@ -63,7 +68,9 @@ def get_diff_percentiles(
     hist = np.stack((bin_cnts, bin_vals), axis=1)
     # compute difference distribution based on binned estimates
     diff_cnts: typing.Dict[float, int] = defaultdict(int)
-    for i in tqdm(range(len(hist)), desc="Computing diff percentiles"):
+    for i in tqdm(
+        range(len(hist)), desc="Computing diff percentiles", disable=disable_tqdm
+    ):
         cnt1, val1 = hist[i]
         # same bin, so just N choose 2 counts of 0 diff
         diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
@@ -207,29 +214,21 @@ def analyze_single_stimulus_with_multiple_models(
 
 def analyze_single_stimuli_data(
     stimuli: typing.Iterable[str],
-    binary_files: typing.List[typing.Union[str, Path]],
-    ngram_files: typing.Optional[typing.List[typing.Union[str, Path]]] = None,
+    models: typing.List[Model],
+    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
     csv_file: typing.Union[Path, str] = "results.csv",
     bos: bool = False,
     eos: bool = False,
+    disable_tqdm: bool = False,
 ) -> pd.DataFrame:
-    models = [Model(file) for file in tqdm(binary_files, desc="Loading models")]
-    if ngram_files:
-        percentile_dict = {
-            int(Path(f).stem[-1]): get_percentiles(
-                f, exclude_bos=not bos, exclude_eos=not eos
-            )
-            for f in ngram_files
-        }
-    else:
-        percentile_dict = {}
     results = []
-    for stimulus in tqdm(stimuli, desc="Analyzing stimuli"):
+    for stimulus in tqdm(stimuli, desc="Analyzing stimuli", disable=disable_tqdm):
         results.append(
             analyze_single_stimulus_with_multiple_models(
                 stimulus, models, percentile_dict=percentile_dict, bos=bos, eos=eos
             )
         )
+    Path(csv_file).parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(results).to_csv(csv_file)
 
 
@@ -296,22 +295,14 @@ def analyze_stimuli_pair_with_models(
 
 def analyze_stimuli_pair_data(
     pairs: typing.Iterable[StimulusPair],
-    binary_files: typing.List[typing.Union[str, Path]],
-    ngram_files: typing.Optional[typing.List[typing.Union[str, Path]]] = None,
+    models: typing.List[Model],
+    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
     csv_file: typing.Union[Path, str] = "results.csv",
+    disable_tqdm: bool = False,
 ):
-    models = [Model(file) for file in tqdm(binary_files, desc="Loading models")]
-    if ngram_files:
-        percentile_dict = {
-            int(Path(f).stem[-1]): get_percentiles(f) for f in ngram_files
-        }
-        diff_percentile_dict = {
-            int(Path(f).stem[-1]): get_diff_percentiles(f) for f in ngram_files
-        }
-    else:
-        percentile_dict = {}
     results = []
-    for pair in tqdm(pairs, desc="Analyzing pairs"):
+    for pair in tqdm(pairs, desc="Analyzing pairs", disable=disable_tqdm):
         results.append(
             analyze_stimuli_pair_with_models(
                 pair,
@@ -320,4 +311,196 @@ def analyze_stimuli_pair_data(
                 diff_percentile_dict=diff_percentile_dict,
             )
         )
+    Path(csv_file).parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(results).to_csv(csv_file)
+
+
+def load_models_and_percentiles(
+    binary_files: typing.Union[typing.List[str], typing.List[Path]],
+    ngram_files: typing.Optional[
+        typing.Union[typing.List[str], typing.List[Path]]
+    ] = None,
+    include_diff: bool = False,
+    percentile_min_fpm: float = 0,
+    disable_tqdm: bool = False,
+) -> typing.Tuple[
+    typing.List[Model],
+    typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+]:
+    models = [
+        Model(file)
+        for file in tqdm(binary_files, desc="Loading models", disable=disable_tqdm)
+    ]
+    percentile_dict = {}
+    diff_percentile_dict = {}
+    if ngram_files:
+        percentile_dict = {
+            int(Path(f).stem[-1]): get_percentiles(
+                f,
+                min_fpm=percentile_min_fpm,
+                exclude_bos=True,
+                exclude_eos=True,
+                disable_tqdm=disable_tqdm,
+            )
+            for f in ngram_files
+        }
+        if include_diff:
+            diff_percentile_dict = {
+                int(Path(f).stem[-1]): get_diff_percentiles(
+                    f,
+                    min_fpm=percentile_min_fpm,
+                    exclude_bos=True,
+                    exclude_eos=True,
+                    disable_tqdm=disable_tqdm,
+                )
+                for f in ngram_files
+            }
+    return models, percentile_dict, diff_percentile_dict
+
+
+def analyze_single(
+    input_file: typing.Union[str, Path],
+    csv_file: typing.Union[str, Path],
+    models: typing.List[Model],
+    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    col: str,
+    bos: bool = False,
+    eos: bool = False,
+    disable_tqdm: bool = False,
+):
+    df = pd.read_csv(input_file)[col]
+    analyze_single_stimuli_data(
+        stimuli=df.values,
+        models=models,
+        percentile_dict=percentile_dict,
+        csv_file=csv_file,
+        bos=bos,
+        eos=eos,
+        disable_tqdm=disable_tqdm,
+    )
+
+
+def analyze_paired(
+    input_file: typing.Union[str, Path],
+    csv_file: typing.Union[str, Path],
+    models: typing.List[Model],
+    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    cols: typing.List[str],
+    disable_tqdm: bool = False,
+):
+    df = pd.read_csv(input_file)[cols]
+    pairs = [
+        StimulusPair(high_item=row[cols[0]], low_item=row[cols[1]])
+        for _, row in df.iterrows()
+    ]
+    analyze_stimuli_pair_data(
+        pairs=pairs,
+        models=models,
+        percentile_dict=percentile_dict,
+        diff_percentile_dict=diff_percentile_dict,
+        csv_file=csv_file,
+        disable_tqdm=disable_tqdm,
+    )
+
+
+def analyze_pairwise(
+    input_file: typing.Union[str, Path],
+    csv_file: typing.Union[str, Path],
+    models: typing.List[Model],
+    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    cols: typing.List[str],
+    disable_tqdm: bool = False,
+):
+    df = pd.read_csv(input_file)[cols]
+    stimuli = []
+    for col in cols:
+        stimuli.extend(df[col].values)
+    pairs = [StimulusPair(high_item=a, low_item=b) for a, b in combinations(stimuli, 2)]
+    analyze_stimuli_pair_data(
+        pairs=pairs,
+        models=models,
+        percentile_dict=percentile_dict,
+        diff_percentile_dict=diff_percentile_dict,
+        csv_file=csv_file,
+        disable_tqdm=disable_tqdm,
+    )
+
+
+def analyze(
+    input_folder: typing.Union[str, Path],
+    output_folder: typing.Union[str, Path],
+    model_files_folder: typing.Union[str, Path],
+    cols: typing.List[str],
+    percentile_min_fpm: float = 0,
+    single_analysis: bool = False,
+    paired_analysis: bool = False,
+    pairwise_analysis: bool = False,
+    disable_tqdm: bool = False,
+):
+    assert (
+        single_analysis or paired_analysis or pairwise_analysis
+    ), "At least one type of analysis must be selected"
+    assert (
+        not paired_analysis or len(cols) == 2
+    ), "Paired analysis requires exactly two columns"
+
+    files = list(Path(input_folder).rglob("*.csv"))
+    Analyze.info(f"Found {len(files)} CSV files to analyze in {input_folder}")
+
+    binary_files = list(Path(model_files_folder).rglob("*.binary"))
+    Analyze.info(
+        f"Found {len(binary_files)} binary files to build models in {model_files_folder}"
+    )
+
+    ngram_files = list(Path(model_files_folder).rglob("*.ngram"))
+    Analyze.info(
+        f"Found {len(ngram_files)} ngram files to compute percentiles in {model_files_folder}"
+    )
+
+    models, percentile_dict, diff_percentile_dict = load_models_and_percentiles(
+        binary_files,
+        ngram_files,
+        include_diff=(paired_analysis or pairwise_analysis),
+        percentile_min_fpm=percentile_min_fpm,
+        disable_tqdm=disable_tqdm,
+    )
+
+    if single_analysis:
+        for col in cols:
+            Analyze.info("Beginning single analysis on stimuli")
+            for f in files:
+                analyze_single(
+                    input_file=f,
+                    csv_file=Path(output_folder) / (f.stem + f"_single_analysis_col={col}.csv"),
+                    models=models,
+                    percentile_dict=percentile_dict,
+                    col=col,
+                    disable_tqdm=disable_tqdm,
+                )
+    if paired_analysis:
+        assert len(cols) == 2
+        Analyze.info("Beginning paired analysis on paired stimuli")
+        for f in files:
+            analyze_paired(
+                input_file=f,
+                csv_file=Path(output_folder) / (f.stem + "_paired_analysis.csv"),
+                models=models,
+                percentile_dict=percentile_dict,
+                diff_percentile_dict=diff_percentile_dict,
+                cols=cols,
+                disable_tqdm=disable_tqdm,
+            )
+    if pairwise_analysis:
+        Analyze.info("Beginning pairwise analysis on stimuli")
+        analyze_pairwise(
+            input_file=f,
+            csv_file=Path(output_folder) / (f.stem + "_pairwise_analysis.csv"),
+            models=models,
+            percentile_dict=percentile_dict,
+            diff_percentile_dict=diff_percentile_dict,
+            cols=cols,
+            disable_tqdm=disable_tqdm,
+        )

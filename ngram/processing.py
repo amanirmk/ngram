@@ -273,6 +273,29 @@ def read_ngrams(
             yield NGram(tokens=tokens)
 
 
+def read_ngram_file(
+    ngram_file: typing.Union[str, Path],
+    min_fpm: float = 0,
+    only_freqs: bool = True,
+    exclude_bos: bool = True,
+    exclude_eos: bool = True,
+    disable_tqdm: bool = False,
+) -> typing.Union[typing.Iterable[float], typing.Iterable[typing.Tuple[float, NGram]]]:
+    with open(ngram_file, "rt", encoding="utf-8") as f:
+        for line in tqdm(f, desc="Loading frequencies", disable=disable_tqdm):
+            freq, *tokens = line.split()
+            if exclude_bos and tokens[0] == "<s>":
+                continue
+            if exclude_eos and tokens[-1] == "</s>":
+                continue
+            freq = float(freq)
+            if freq < min_fpm:
+                continue
+            if only_freqs:
+                yield freq
+            yield freq, NGram(tokens=tokens)
+
+
 def create_ngram(
     arpa: typing.Union[str, Path],
     binary: typing.Union[str, Path],
@@ -302,7 +325,7 @@ def create_ngram(
             f.write(f"{fpm} {ngram.text()}\n")
 
 
-def create_model_files(
+def process(
     input_folder: typing.Union[str, Path],
     processed_corpora_folder: typing.Union[str, Path],
     model_output_folder: typing.Union[str, Path],

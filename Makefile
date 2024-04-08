@@ -20,7 +20,6 @@ ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
 endif
 	@$(ACTIVATE); $(INSTALL) -e "."
 	
-	
 ## kenlm     : setup kenlm (not guaranteed to work).
 .PHONY : kenlm
 kenlm :
@@ -29,7 +28,7 @@ kenlm :
 ## format    : format code with black.
 .PHONY : format
 format : env
-	@$(ACTIVATE); black .
+	@black .
 
 ## test      : run testing pipeline.
 .PHONY : test
@@ -37,20 +36,20 @@ test: style static
 style : black
 static : mypy pylint 
 mypy : env
-	@$(ACTIVATE); mypy \
+	@mypy \
 	-p $(PACKAGE) \
 	--ignore-missing-imports
 pylint : env
-	@$(ACTIVATE); pylint $(PACKAGE) \
+	@pylint $(PACKAGE) \
 	--disable C0112,C0113,C0114,C0115,C0116 \
 	|| pylint-exit $$?
 black : env
-	@$(ACTIVATE); black --check .
+	@black --check .
 
 ## ngram     : run package.
 .PHONY : $(PACKAGE)
 $(PACKAGE) : env
-	@$(ACTIVATE); $(RUN) $(PACKAGE)
+	@$(RUN) $(PACKAGE)
 
 ## uninstall : remove environment
 .PHONY : uninstall
