@@ -293,7 +293,8 @@ def read_ngram_file(
                 continue
             if only_freqs:
                 yield freq
-            yield freq, NGram(tokens=tokens)
+            else:
+                yield freq, NGram(tokens=tokens)
 
 
 def create_ngram(

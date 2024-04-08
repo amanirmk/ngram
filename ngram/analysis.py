@@ -229,7 +229,7 @@ def analyze_single_stimuli_data(
             )
         )
     Path(csv_file).parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(results).to_csv(csv_file)
+    pd.DataFrame(results).to_csv(csv_file, index=False)
 
 
 def add_stimuli_pair_results(
@@ -312,7 +312,7 @@ def analyze_stimuli_pair_data(
             )
         )
     Path(csv_file).parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(results).to_csv(csv_file)
+    pd.DataFrame(results).to_csv(csv_file, index=False)
 
 
 def load_models_and_percentiles(
@@ -474,7 +474,8 @@ def analyze(
             for f in files:
                 analyze_single(
                     input_file=f,
-                    csv_file=Path(output_folder) / (f.stem + f"_single_analysis_col={col}.csv"),
+                    csv_file=Path(output_folder)
+                    / (f.stem + f"_single_analysis_col={col}.csv"),
                     models=models,
                     percentile_dict=percentile_dict,
                     col=col,
@@ -495,12 +496,13 @@ def analyze(
             )
     if pairwise_analysis:
         Analyze.info("Beginning pairwise analysis on stimuli")
-        analyze_pairwise(
-            input_file=f,
-            csv_file=Path(output_folder) / (f.stem + "_pairwise_analysis.csv"),
-            models=models,
-            percentile_dict=percentile_dict,
-            diff_percentile_dict=diff_percentile_dict,
-            cols=cols,
-            disable_tqdm=disable_tqdm,
-        )
+        for f in files:
+            analyze_pairwise(
+                input_file=f,
+                csv_file=Path(output_folder) / (f.stem + "_pairwise_analysis.csv"),
+                models=models,
+                percentile_dict=percentile_dict,
+                diff_percentile_dict=diff_percentile_dict,
+                cols=cols,
+                disable_tqdm=disable_tqdm,
+            )

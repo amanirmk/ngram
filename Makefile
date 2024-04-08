@@ -16,7 +16,7 @@ help : Makefile
 env : $(PACKAGE).egg-info/
 $(PACKAGE).egg-info/ : setup.py requirements.txt
 ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
-	@conda init bash; conda create -yn $(PACKAGE) $(EXEC)
+	@conda create -yn $(PACKAGE) $(EXEC)
 endif
 	@$(ACTIVATE); $(INSTALL) -e "."
 	
