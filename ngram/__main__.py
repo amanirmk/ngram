@@ -2,7 +2,8 @@ from transformers import HfArgumentParser
 
 from ngram.abstract import Object
 from ngram.args import Arguments
-from ngram.processing import create_model_files
+from ngram.processing import process
+from ngram.analysis import analyze
 
 
 def main() -> None:
@@ -17,7 +18,7 @@ def main() -> None:
         Main.info(
             f"Building model files {'up to' if args.all_up_to else 'for'} n={args.max_n}."
         )
-        create_model_files(
+        process(
             input_folder=args.original_corpora,
             processed_corpora_folder=args.processed_corpora,
             model_output_folder=args.model_files,
@@ -29,6 +30,21 @@ def main() -> None:
             filestem=args.processed_filestem,
             all_up_to=args.all_up_to,
             prune=args.prune,
+        )
+    elif args.action == "analyze":
+        Main.info(
+            f"Beginning to analyze stimuli in {args.stimuli}. Output will be saved in {args.stimuli_analyzed}."
+        )
+        analyze(
+            input_folder=args.stimuli,
+            output_folder=args.stimuli_analyzed,
+            model_files_folder=args.model_files,
+            cols=args.columns_for_analysis,
+            percentile_min_fpm=args.percentile_min_fpm,
+            single_analysis=args.do_single_analysis,
+            paired_analysis=args.do_paired_analysis,
+            pairwise_analysis=args.do_pairwise_analysis,
+            disable_tqdm=args.disable_tqdm,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")
