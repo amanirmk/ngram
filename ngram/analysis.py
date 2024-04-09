@@ -68,17 +68,21 @@ def get_diff_percentiles(
     hist = np.stack((bin_cnts, bin_vals), axis=1)
     # compute difference distribution based on binned estimates
     diff_cnts: typing.Dict[float, int] = defaultdict(int)
-    for i in tqdm(
-        range(len(hist)), desc="Computing diff percentiles", disable=disable_tqdm
-    ):
-        cnt1, val1 = hist[i]
-        # same bin, so just N choose 2 counts of 0 diff
-        diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
-        for j in range(i + 1, len(hist)):
-            cnt2, val2 = hist[j]
-            # for diff bins, N1 * N2 counts of diff
-            # measure diff in freq space, not log space
-            diff_cnts[abs(10**val1 - 10**val2)] += int(cnt1 * cnt2)
+    with tqdm(
+        total=int((len(hist) * (len(hist) - 1)) / 2),
+        desc="Computing diff percentiles",
+        disable=disable_tqdm,
+    ) as pbar:
+        for i in range(len(hist)):
+            cnt1, val1 = hist[i]
+            # same bin, so just N choose 2 counts of 0 diff
+            diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
+            for j in range(i + 1, len(hist)):
+                cnt2, val2 = hist[j]
+                # for diff bins, N1 * N2 counts of diff
+                # measure diff in freq space, not log space
+                diff_cnts[abs(10**val1 - 10**val2)] += int(cnt1 * cnt2)
+                pbar.update(1)
     # compute percentiles
     diffs = np.array(list(diff_cnts.keys()))
     counts = np.array(list(diff_cnts.values()))
@@ -320,6 +324,7 @@ def load_models_and_percentiles(
     ngram_files: typing.Optional[
         typing.Union[typing.List[str], typing.List[Path]]
     ] = None,
+    max_n: typing.Optional[int] = None,
     include_diff: bool = False,
     percentile_min_fpm: float = 0,
     disable_tqdm: bool = False,
@@ -332,6 +337,7 @@ def load_models_and_percentiles(
         Model(file)
         for file in tqdm(binary_files, desc="Loading models", disable=disable_tqdm)
     ]
+    models = [m for m in models if max_n is None or m._order <= max_n]
     percentile_dict = {}
     diff_percentile_dict = {}
     if ngram_files:
@@ -344,6 +350,7 @@ def load_models_and_percentiles(
                 disable_tqdm=disable_tqdm,
             )
             for f in ngram_files
+            if max_n is None or int(Path(f).stem[-1]) <= max_n
         }
         if include_diff:
             diff_percentile_dict = {
@@ -355,6 +362,7 @@ def load_models_and_percentiles(
                     disable_tqdm=disable_tqdm,
                 )
                 for f in ngram_files
+                if max_n is None or int(Path(f).stem[-1]) <= max_n
             }
     return models, percentile_dict, diff_percentile_dict
 
@@ -434,6 +442,7 @@ def analyze(
     output_folder: typing.Union[str, Path],
     model_files_folder: typing.Union[str, Path],
     cols: typing.List[str],
+    max_n: typing.Optional[int] = None,
     percentile_min_fpm: float = 0,
     single_analysis: bool = False,
     paired_analysis: bool = False,
@@ -463,6 +472,7 @@ def analyze(
     models, percentile_dict, diff_percentile_dict = load_models_and_percentiles(
         binary_files,
         ngram_files,
+        max_n=max_n,
         include_diff=(paired_analysis or pairwise_analysis),
         percentile_min_fpm=percentile_min_fpm,
         disable_tqdm=disable_tqdm,
