@@ -54,4 +54,4 @@ $(PACKAGE) : env
 ## uninstall : remove environment
 .PHONY : uninstall
 uninstall :
-	@conda env remove -n $(PACKAGE); touch requirements.txt
+	@conda env remove -yn $(PACKAGE); touch requirements.txt
