@@ -5,7 +5,7 @@ import typing
 @dataclasses.dataclass
 class Arguments:
     # which pipeline to use
-    action: typing.Optional[str] = dataclasses.field(default="analyze")
+    action: typing.Optional[str] = dataclasses.field(default="process")
 
     # folder locations
     original_corpora: typing.Optional[str] = dataclasses.field(
@@ -30,12 +30,12 @@ class Arguments:
 
     # general arguments
     disable_tqdm: typing.Optional[bool] = dataclasses.field(default=False)
+    max_n: typing.Optional[int] = dataclasses.field(default=4)
+    # note: processing max_n >= 7 requires kenlm rebuild
+    # note: processing max_n == 1 will build a bigram model as proxy
 
     # arguments for action=process
     processed_filestem: typing.Optional[str] = dataclasses.field(default="all_corpora")
-    max_n: typing.Optional[int] = dataclasses.field(default=4)
-    # note: max_n >= 7 requires kenlm rebuild
-    # note: max_n == 1 will build a bigram model as proxy
     all_up_to: typing.Optional[bool] = dataclasses.field(default=True)
     prune: typing.Optional[bool] = dataclasses.field(default=True)
     kenlm_ram_limit_mb: typing.Optional[int] = dataclasses.field(default=4096)
@@ -48,3 +48,16 @@ class Arguments:
         default_factory=lambda: ["high_item", "low_item"],
     )
     percentile_min_fpm: typing.Optional[float] = dataclasses.field(default=0)
+
+    # arguments for action=construct
+    ngram_file: typing.Optional[str] = dataclasses.field(
+        default="./data/model_files/ngram/all_corpora_4.ngram",
+    )
+    prefix_file: typing.Optional[str] = dataclasses.field(
+        default="./data/model_files/ngram/all_corpora_3.ngram",
+    )
+    constructed_pairs_csv: typing.Optional[str] = dataclasses.field(
+        default="./data/stimuli_constructed/constructed_pairs.csv",
+    )
+    n_candidates: typing.Optional[int] = dataclasses.field(default=10000)
+    # note: construct also uses percentile_min_fpm (as it analyzes constructed pairs)

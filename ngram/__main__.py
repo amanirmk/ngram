@@ -4,6 +4,7 @@ from ngram.abstract import Object
 from ngram.args import Arguments
 from ngram.processing import process
 from ngram.analysis import analyze
+from ngram.construction import construct
 
 
 def main() -> None:
@@ -40,10 +41,25 @@ def main() -> None:
             output_folder=args.stimuli_analyzed,
             model_files_folder=args.model_files,
             cols=args.columns_for_analysis,
+            max_n=args.max_n,
             percentile_min_fpm=args.percentile_min_fpm,
             single_analysis=args.do_single_analysis,
             paired_analysis=args.do_paired_analysis,
             pairwise_analysis=args.do_pairwise_analysis,
+            disable_tqdm=args.disable_tqdm,
+        )
+    elif args.action == "construct":
+        Main.info(
+            f"Beginning to construct stimuli pairs from {args.ngram_file}. Output will be saved in {args.constructed_pairs_csv}."
+        )
+        construct(
+            model_files_folder=args.model_files,
+            ngram_file=args.ngram_file,
+            prefix_file=args.prefix_file,
+            output_file=args.constructed_pairs_csv,
+            max_n=args.max_n,
+            n_candidates=args.n_candidates,
+            min_fpm=args.percentile_min_fpm,
             disable_tqdm=args.disable_tqdm,
         )
     else:
