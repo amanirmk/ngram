@@ -297,6 +297,24 @@ def analyze_stimuli_pair_with_models(
     return results
 
 
+def goodness_rerank(
+    input_file: typing.Union[str, Path], orders: typing.Iterable[int]
+) -> None:
+    stimuli_pairs = pd.read_csv(input_file)
+    orders = sorted(orders, reverse=True)
+    Analyze.info(
+        f"Maximizing difference for order {orders[0]} while minimizing for orders {orders[1:]}"
+    )
+    minimize_cols = [f"final_diff_percentile_{k}" for k in orders[1:]]
+    max_to_minimize = stimuli_pairs[minimize_cols].max(axis=1)
+    to_maximize = stimuli_pairs[f"final_diff_percentile_{orders[0]}"]
+    goodness = to_maximize - max_to_minimize
+    stimuli_pairs["goodness"] = goodness
+    stimuli_pairs.sort_values("goodness", ascending=False, inplace=True)
+    stimuli_pairs.to_csv(input_file, index=False)
+    Analyze.info(f"Ordered pairs re-saved to {input_file}")
+
+
 def analyze_stimuli_pair_data(
     pairs: typing.Iterable[StimulusPair],
     models: typing.List[Model],
@@ -313,10 +331,13 @@ def analyze_stimuli_pair_data(
                 models,
                 percentile_dict=percentile_dict,
                 diff_percentile_dict=diff_percentile_dict,
+                include_unigram=True,
             )
         )
     Path(csv_file).parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(results).to_csv(csv_file, index=False)
+    orders = [1] + [m._order for m in models]
+    goodness_rerank(csv_file, orders)
 
 
 def load_models_and_percentiles(
