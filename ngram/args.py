@@ -28,7 +28,7 @@ class Arguments:
         default="./data/stimuli_analyzed",
     )
 
-    # general arguments
+    # general arguments (for all actions)
     disable_tqdm: typing.Optional[bool] = dataclasses.field(default=False)
     max_n: typing.Optional[int] = dataclasses.field(default=4)
     # note: processing max_n >= 7 requires kenlm rebuild
@@ -60,4 +60,6 @@ class Arguments:
         default="./data/stimuli_constructed/constructed_pairs.csv",
     )
     n_candidates: typing.Optional[int] = dataclasses.field(default=10000)
+    top_bottom_k: typing.Optional[int] = dataclasses.field(default=20)
+    sampling_seed: typing.Optional[int] = dataclasses.field(default=42)
     # note: construct also uses percentile_min_fpm (as it analyzes constructed pairs)

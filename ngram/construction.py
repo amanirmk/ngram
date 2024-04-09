@@ -6,7 +6,7 @@ from ngram.processing import read_ngram_file
 from ngram.datatypes import NGram, StimulusPair
 from ngram.abstract import Object
 from ngram.analysis import analyze_stimuli_pair_data, load_models_and_percentiles
-import pandas as pd
+import numpy as np
 
 
 class Construct(Object):
@@ -23,12 +23,26 @@ def create_prefix_query(
     return prefix_query
 
 
+def sample_from_prefixes(
+    prefixes: typing.List[str], probs: typing.List[float], seed: int = 42
+) -> typing.Iterable[str]:
+    np.random.seed(seed)
+    idxs = np.arange(len(prefixes))
+    p = np.array(probs)
+    while not np.all(probs == 0):
+        idx = np.random.choice(idxs, p=p)
+        p[idx] = 0
+        yield prefixes[idx]
+
+
 def create_candidates(
     ngram_file: typing.Union[str, Path],
     prefix_file: typing.Optional[typing.Union[str, Path]] = None,
     n_candidates: int = 10000,
+    top_bottom_k: int = 20,
     min_fpm: float = 0,
     disable_tqdm: bool = False,
+    seed: int = 42,
 ) -> typing.Iterable[StimulusPair]:
     ngrams = (  # type: ignore[misc]
         ngram
@@ -44,30 +58,28 @@ def create_candidates(
     prefix_query = create_prefix_query(ngrams)
 
     if prefix_file:
-        # this has the advantage of pre-sorting by more likely prefixes
-        prefixes = (  # type: ignore[misc]
-            prefix.text()
-            for _, prefix in read_ngram_file(
-                ngram_file=prefix_file,
-                min_fpm=min_fpm,  # prefix should always have greater fpm than full ngram, so fine to cut off
-                only_freqs=False,
-                exclude_bos=True,
-                exclude_eos=True,
-                disable_tqdm=disable_tqdm,
-            )
-        )
+        prefixes = []
+        probs = []
+        for fpm, prefix in read_ngram_file(  # type: ignore[misc]
+            ngram_file=prefix_file,
+            min_fpm=min_fpm,  # prefix should always have greater fpm than full ngram, so fine to cut off
+            only_freqs=False,
+            exclude_bos=True,
+            exclude_eos=True,
+            disable_tqdm=disable_tqdm,
+        ):
+            prefixes.append(prefix.text())
+            probs.append(fpm)
     else:
-        prefixes = (prefix for prefix in prefix_query.keys())
-
-    # TODO:
-    # determine smart ways to sample from good candidates instead of enumerating since large space
-    # maybe sample from prefixes proportional to their frequency without replacement
-    # and only get first and last K from full_texts
+        prefixes = [prefix for prefix in prefix_query.keys()]
+        probs = [1 / idx for idx in range(1, len(prefixes) + 1)]
 
     n = 0
-    for prefix in prefixes:
+    for prefix in sample_from_prefixes(prefixes, probs, seed=seed):
         if prefix in prefix_query:
             full_texts = prefix_query[prefix]
+            if len(full_texts) > 2 * top_bottom_k:
+                full_texts = full_texts[:top_bottom_k] + full_texts[-top_bottom_k:]
             for (i, s1), (j, s2) in combinations(enumerate(full_texts), 2):
                 # they're ordered by frequency, so high item is first
                 if i < j:
@@ -92,8 +104,10 @@ def construct(
     output_file: typing.Union[str, Path] = "constructed_pairs.csv",
     max_n: typing.Optional[int] = None,
     n_candidates: int = 10000,
+    top_bottom_k: int = 20,
     min_fpm: float = 0,
     disable_tqdm: bool = False,
+    seed: int = 42,
 ):
     binary_files = list(Path(model_files_folder).rglob("*.binary"))
     Construct.info(
@@ -115,8 +129,10 @@ def construct(
         ngram_file=ngram_file,
         prefix_file=prefix_file,
         n_candidates=n_candidates,
+        top_bottom_k=top_bottom_k,
         min_fpm=min_fpm,
         disable_tqdm=disable_tqdm,
+        seed=seed,
     )
     analyze_stimuli_pair_data(
         pairs=pairs,
@@ -127,20 +143,3 @@ def construct(
         disable_tqdm=disable_tqdm,
     )
     Construct.info(f"Constructed pairs saved to {output_file}")
-    stimuli_pairs = pd.read_csv(output_file)
-
-    orders = sorted((m._order for m in models), reverse=True)
-    Construct.info(
-        f"Maximizing difference for order {orders[0]} while minimizing for orders {orders[1:]}"
-    )
-    minimize_cols = [f"final_diff_percentile_{k}" for k in orders[1:]]
-    max_to_minimize = stimuli_pairs[minimize_cols].max(axis=1)
-    to_maximize = stimuli_pairs[f"final_diff_percentile_{orders[0]}"]
-    goodness = to_maximize - max_to_minimize
-
-    # TODO: better measure for goodness of fit
-    stimuli_pairs["goodness"] = goodness
-    stimuli_pairs.sort_values("goodness", ascending=False, inplace=True)
-
-    stimuli_pairs.to_csv(output_file, index=False)
-    Construct.info(f"Ordered pairs re-saved to {output_file}")

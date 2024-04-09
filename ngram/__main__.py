@@ -14,10 +14,13 @@ def main() -> None:
     args = HfArgumentParser(Arguments).parse_args()
     if args.action == "process":
         Main.info(
-            f"Beginning to process corpora in {args.original_corpora}. Output will be saved in {args.processed_corpora} and {args.model_files}."
+            f"Beginning to process corpora in {args.original_corpora}. "
+            + f"Output will be saved in {args.processed_corpora} and "
+            + f"{args.model_files}."
         )
         Main.info(
-            f"Building model files {'up to' if args.all_up_to else 'for'} n={args.max_n}."
+            f"Building model files {'up to' if args.all_up_to else 'for'} "
+            + f"n={args.max_n}."
         )
         process(
             input_folder=args.original_corpora,
@@ -34,7 +37,8 @@ def main() -> None:
         )
     elif args.action == "analyze":
         Main.info(
-            f"Beginning to analyze stimuli in {args.stimuli}. Output will be saved in {args.stimuli_analyzed}."
+            f"Beginning to analyze stimuli in {args.stimuli}. "
+            + f"Output will be saved in {args.stimuli_analyzed}."
         )
         analyze(
             input_folder=args.stimuli,
@@ -50,7 +54,8 @@ def main() -> None:
         )
     elif args.action == "construct":
         Main.info(
-            f"Beginning to construct stimuli pairs from {args.ngram_file}. Output will be saved in {args.constructed_pairs_csv}."
+            f"Beginning to construct stimuli pairs from {args.ngram_file}. "
+            + f"Output will be saved in {args.constructed_pairs_csv}."
         )
         construct(
             model_files_folder=args.model_files,
@@ -59,8 +64,10 @@ def main() -> None:
             output_file=args.constructed_pairs_csv,
             max_n=args.max_n,
             n_candidates=args.n_candidates,
+            top_bottom_k=args.top_bottom_k,
             min_fpm=args.percentile_min_fpm,
             disable_tqdm=args.disable_tqdm,
+            seed=args.sampling_seed,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")

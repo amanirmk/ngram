@@ -2,8 +2,8 @@ import re
 import typing
 import string
 import os
-from tqdm import tqdm
 from pathlib import Path
+from tqdm import tqdm
 from ngram.datatypes import NGram
 from ngram.model import Model
 from ngram.abstract import Object
@@ -366,9 +366,9 @@ def process(
     Processing.info(f"ARPA and binary files saved to {model_output_folder}.")
     if all_up_to:
         create_ngram(
-            arpa_file.parent / Path(arpa_file.stem + f"_2.arpa"),
-            binary_file.parent / Path(binary_file.stem + f"_2.binary"),
-            ngram_file.parent / Path(ngram_file.stem + f"_1.ngram"),
+            arpa_file.parent / Path(arpa_file.stem + "_2.arpa"),
+            binary_file.parent / Path(binary_file.stem + "_2.binary"),
+            ngram_file.parent / Path(ngram_file.stem + "_1.ngram"),
             get_unigram=True,
             disable_tqdm=disable_tqdm,
         )
