@@ -29,7 +29,8 @@ def sample_from_prefixes(
     np.random.seed(seed)
     idxs = np.arange(len(prefixes))
     p = np.array(probs)
-    while not np.all(probs == 0):
+    while not np.all(p == 0):
+        p /= p.sum()
         idx = np.random.choice(idxs, p=p)
         p[idx] = 0
         yield prefixes[idx]
