@@ -20,7 +20,7 @@ class Model(Object):
 
     def freq_per_mil(self, ngram: NGram) -> typing.Tuple[float, bool]:
         scores = list(self.full_scores(ngram.text()))
-        fpm = 10 ** sum(s[0] for s in scores) * 1000000
+        fpm = 10 ** sum(s[0] for s in scores) * 1_000_000
         _, n_used, _ = scores[-1]
         oov = sum(s[2] for s in scores) > 0
         in_vocab = n_used == len(ngram) and not oov

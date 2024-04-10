@@ -39,7 +39,7 @@ def sample_from_prefixes(
 def create_candidates(
     ngram_file: typing.Union[str, Path],
     prefix_file: typing.Optional[typing.Union[str, Path]] = None,
-    n_candidates: int = 10000,
+    n_candidates: int = 10_000,
     top_bottom_k: int = 20,
     min_fpm: float = 0,
     disable_tqdm: bool = False,
@@ -104,7 +104,7 @@ def construct(
     prefix_file: typing.Optional[typing.Union[str, Path]] = None,
     output_file: typing.Union[str, Path] = "constructed_pairs.csv",
     max_n: typing.Optional[int] = None,
-    n_candidates: int = 10000,
+    n_candidates: int = 10_000,
     top_bottom_k: int = 20,
     min_fpm: float = 0,
     disable_tqdm: bool = False,

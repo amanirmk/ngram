@@ -38,7 +38,7 @@ class Arguments:
     processed_filestem: typing.Optional[str] = dataclasses.field(default="all_corpora")
     all_up_to: typing.Optional[bool] = dataclasses.field(default=True)
     prune: typing.Optional[bool] = dataclasses.field(default=True)
-    kenlm_ram_limit_mb: typing.Optional[int] = dataclasses.field(default=4096)
+    kenlm_ram_limit_mb: typing.Optional[int] = dataclasses.field(default=4_096)
 
     # arguments for action=analyze
     do_single_analysis: typing.Optional[bool] = dataclasses.field(default=True)
@@ -59,7 +59,7 @@ class Arguments:
     constructed_pairs_csv: typing.Optional[str] = dataclasses.field(
         default="./data/stimuli_constructed/constructed_pairs.csv",
     )
-    n_candidates: typing.Optional[int] = dataclasses.field(default=10000)
+    n_candidates: typing.Optional[int] = dataclasses.field(default=10_000)
     top_bottom_k: typing.Optional[int] = dataclasses.field(default=20)
     sampling_seed: typing.Optional[int] = dataclasses.field(default=42)
     # note: construct also uses percentile_min_fpm (as it analyzes constructed pairs)
