@@ -42,7 +42,7 @@ def get_percentiles(
 
 def get_diff_percentiles(
     ngram_file: typing.Union[str, Path],
-    num_bins: int = 10000,
+    num_bins: int = 10_000,
     min_fpm: float = 0,
     exclude_bos: bool = True,
     exclude_eos: bool = True,
@@ -118,7 +118,7 @@ def analyze_single_stimulus_with_unigram(
     any_oov = any(s[2] for s in scores)
     any_backed_off = False
     logprob = sum(s[0] for s in scores)
-    freq_per_mil = 10**logprob * 1000000
+    freq_per_mil = 10**logprob * 1_000_000
     lobprob_by_token = [s[0] for s in scores]
     return (
         lobprob_by_token,
@@ -141,7 +141,7 @@ def analyze_single_stimulus_with_model(
     any_oov = any(s[2] for s in scores)
     any_backed_off = any(s[1] < model._order for s in scores[model._order - 1 :])
     logprob = sum(s[0] for s in scores)
-    freq_per_mil = 10**logprob * 1000000
+    freq_per_mil = 10**logprob * 1_000_000
     lobprob_by_token = [s[0] for s in scores]
     return (
         lobprob_by_token,
