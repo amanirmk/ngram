@@ -19,11 +19,6 @@ ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
 	@conda create -yn $(PACKAGE) $(EXEC)
 endif
 	@$(ACTIVATE); $(INSTALL) -e "."
-	
-## kenlm     : setup kenlm (not guaranteed to work).
-.PHONY : kenlm
-kenlm :
-	@bash setup_kenlm.sh
 
 ## format    : format code with black.
 .PHONY : format

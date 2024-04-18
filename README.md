@@ -8,13 +8,7 @@ make env
 ```
 This should work for most devices, but I encourage inspecting the Makefile before running any `make` commands if you are concerned.
 
-### 2. Download and setup KenLM
-```
-make kenlm
-```
-Unfortunately this command will only work on some devices (namely my 2021 Macbook running Apple M1 Pro). You should probably setup KenLM on your own and specify the correct path in `ngram/args.py`. See [KenLM](https://kheafield.com/code/kenlm/) for more.
-
-### 3. Use the module (two options)
+### 2. Use the module (two options)
 
 To run exactly as pre-specified in `ngram/args.py`:
 ```
