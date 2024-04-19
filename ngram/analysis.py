@@ -1,4 +1,4 @@
-import typing
+from typing import List, Tuple, Dict, Any, Union, Iterable, Optional
 from itertools import combinations
 from collections import defaultdict
 from pathlib import Path
@@ -16,13 +16,13 @@ class Analyze(Object):
 
 
 def get_percentiles(
-    ngram_file: typing.Union[str, Path],
+    ngram_file: Union[str, Path],
     num: int = 400,
     min_fpm: float = 0,
     exclude_bos: bool = True,
     exclude_eos: bool = True,
     disable_tqdm: bool = False,
-) -> typing.Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     freqs = np.array(
         list(
             read_ngram_file(
@@ -41,13 +41,13 @@ def get_percentiles(
 
 
 def get_diff_percentiles(
-    ngram_file: typing.Union[str, Path],
+    ngram_file: Union[str, Path],
     num_bins: int = 10_000,
     min_fpm: float = 0,
     exclude_bos: bool = True,
     exclude_eos: bool = True,
     disable_tqdm: bool = False,
-) -> typing.Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     freqs = np.array(
         list(
             read_ngram_file(
@@ -67,7 +67,7 @@ def get_diff_percentiles(
     bin_vals = (bin_edges[:-1] + bin_edges[1:]) / 2
     hist = np.stack((bin_cnts, bin_vals), axis=1)
     # compute difference distribution based on binned estimates
-    diff_cnts: typing.Dict[float, int] = defaultdict(int)
+    diff_cnts: Dict[float, int] = defaultdict(int)
     with tqdm(
         total=int((len(hist) * (len(hist) - 1)) / 2),
         desc="Computing diff percentiles",
@@ -101,7 +101,7 @@ def percentile(
 
 
 def average_percentile(
-    freq_per_mils: typing.List[float], pctile_vals: np.ndarray, pctiles: np.ndarray
+    freq_per_mils: List[float], pctile_vals: np.ndarray, pctiles: np.ndarray
 ) -> float:
     return float(
         np.mean([percentile(fpm, pctile_vals, pctiles) for fpm in freq_per_mils])
@@ -110,7 +110,7 @@ def average_percentile(
 
 def analyze_single_stimulus_with_unigram(
     stimulus: str, any_model: Model, bos: bool = False, eos: bool = False
-) -> typing.Tuple[typing.List[float], float, typing.List[float], float, bool, bool]:
+) -> Tuple[List[float], float, List[float], float, bool, bool]:
     scores = list(
         any_model.approximate_subgram_full_scores(stimulus, 1, bos=bos, eos=eos)
     )
@@ -135,7 +135,7 @@ def analyze_single_stimulus_with_model(
     model: Model,
     bos: bool = False,
     eos: bool = False,
-) -> typing.Tuple[typing.List[float], float, typing.List[float], float, bool, bool]:
+) -> Tuple[List[float], float, List[float], float, bool, bool]:
     scores = list(model.full_scores(stimulus, bos=bos, eos=eos))
     freq_per_mil_by_ngram = model.ngram_freqs(stimulus, bos=bos, eos=eos)
     any_oov = any(s[2] for s in scores)
@@ -155,12 +155,10 @@ def analyze_single_stimulus_with_model(
 
 def add_single_stimulus_results(
     results,
-    analyze_output: typing.Tuple[
-        typing.List[float], float, typing.List[float], float, bool, bool
-    ],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    analyze_output: Tuple[List[float], float, List[float], float, bool, bool],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
     k: int,
-) -> typing.Dict[str, typing.Any]:
+) -> Dict[str, Any]:
     (
         logprob_by_token,
         logprob,
@@ -184,15 +182,15 @@ def add_single_stimulus_results(
 
 def analyze_single_stimulus_with_multiple_models(
     stimulus: str,
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
     include_unigram: bool = True,
     bos: bool = False,
     eos: bool = False,
-) -> typing.Dict[str, typing.Any]:
+) -> Dict[str, Any]:
     tmp = process_text(stimulus)
     tokenized_stimulus = (models[0].BOS + " ") * bos + tmp + (" " + models[0].EOS) * eos
-    results: typing.Dict[str, typing.Any] = {
+    results: Dict[str, Any] = {
         "stimulus": stimulus,
         "tokenized_stimulus": tokenized_stimulus,
     }
@@ -217,10 +215,10 @@ def analyze_single_stimulus_with_multiple_models(
 
 
 def analyze_single_stimuli_data(
-    stimuli: typing.Iterable[str],
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    csv_file: typing.Union[Path, str] = "results.csv",
+    stimuli: Iterable[str],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    csv_file: Union[Path, str] = "results.csv",
     bos: bool = False,
     eos: bool = False,
     disable_tqdm: bool = False,
@@ -238,9 +236,9 @@ def analyze_single_stimuli_data(
 
 def add_stimuli_pair_results(
     results,
-    analyze_output: typing.Tuple[float, bool, float, float],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    analyze_output: Tuple[float, bool, float, float],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
     k: int,
 ):
     diff, both_in_vocab, fpm1, fpm2 = analyze_output
@@ -262,14 +260,14 @@ def add_stimuli_pair_results(
 
 def analyze_stimuli_pair_with_models(
     pair: StimulusPair,
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
     include_unigram: bool = True,
-) -> typing.Dict[str, typing.Any]:
+) -> Dict[str, Any]:
     high_item_tokenized = process_text(pair.high_item)
     low_item_tokenized = process_text(pair.low_item)
-    results: typing.Dict[str, typing.Any] = {
+    results: Dict[str, Any] = {
         "high_item": pair.high_item,
         "high_item_tokenized": high_item_tokenized,
         "low_item": pair.low_item,
@@ -297,9 +295,7 @@ def analyze_stimuli_pair_with_models(
     return results
 
 
-def goodness_rerank(
-    input_file: typing.Union[str, Path], orders: typing.Iterable[int]
-) -> None:
+def goodness_rerank(input_file: Union[str, Path], orders: Iterable[int]) -> None:
     stimuli_pairs = pd.read_csv(input_file)
     orders = sorted(orders, reverse=True)
     Analyze.info(
@@ -316,11 +312,11 @@ def goodness_rerank(
 
 
 def analyze_stimuli_pair_data(
-    pairs: typing.Iterable[StimulusPair],
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    csv_file: typing.Union[Path, str] = "results.csv",
+    pairs: Iterable[StimulusPair],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    csv_file: Union[Path, str] = "results.csv",
     disable_tqdm: bool = False,
 ):
     results = []
@@ -341,18 +337,16 @@ def analyze_stimuli_pair_data(
 
 
 def load_models_and_percentiles(
-    binary_files: typing.Union[typing.List[str], typing.List[Path]],
-    ngram_files: typing.Optional[
-        typing.Union[typing.List[str], typing.List[Path]]
-    ] = None,
-    max_n: typing.Optional[int] = None,
+    binary_files: Union[List[str], List[Path]],
+    ngram_files: Optional[Union[List[str], List[Path]]] = None,
+    max_n: Optional[int] = None,
     include_diff: bool = False,
     percentile_min_fpm: float = 0,
     disable_tqdm: bool = False,
-) -> typing.Tuple[
-    typing.List[Model],
-    typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+) -> Tuple[
+    List[Model],
+    Dict[int, Tuple[np.ndarray, np.ndarray]],
+    Dict[int, Tuple[np.ndarray, np.ndarray]],
 ]:
     models = [
         Model(file)
@@ -389,10 +383,10 @@ def load_models_and_percentiles(
 
 
 def analyze_single(
-    input_file: typing.Union[str, Path],
-    csv_file: typing.Union[str, Path],
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
+    input_file: Union[str, Path],
+    csv_file: Union[str, Path],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
     col: str,
     bos: bool = False,
     eos: bool = False,
@@ -411,12 +405,12 @@ def analyze_single(
 
 
 def analyze_paired(
-    input_file: typing.Union[str, Path],
-    csv_file: typing.Union[str, Path],
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    cols: typing.List[str],
+    input_file: Union[str, Path],
+    csv_file: Union[str, Path],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    cols: List[str],
     disable_tqdm: bool = False,
 ):
     df = pd.read_csv(input_file)[cols]
@@ -435,12 +429,12 @@ def analyze_paired(
 
 
 def analyze_pairwise(
-    input_file: typing.Union[str, Path],
-    csv_file: typing.Union[str, Path],
-    models: typing.List[Model],
-    percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    diff_percentile_dict: typing.Dict[int, typing.Tuple[np.ndarray, np.ndarray]],
-    cols: typing.List[str],
+    input_file: Union[str, Path],
+    csv_file: Union[str, Path],
+    models: List[Model],
+    percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    diff_percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    cols: List[str],
     disable_tqdm: bool = False,
 ):
     df = pd.read_csv(input_file)[cols]
@@ -459,11 +453,11 @@ def analyze_pairwise(
 
 
 def analyze(
-    input_folder: typing.Union[str, Path],
-    output_folder: typing.Union[str, Path],
-    model_files_folder: typing.Union[str, Path],
-    cols: typing.List[str],
-    max_n: typing.Optional[int] = None,
+    input_folder: Union[str, Path],
+    output_folder: Union[str, Path],
+    model_files_folder: Union[str, Path],
+    cols: List[str],
+    max_n: Optional[int] = None,
     percentile_min_fpm: float = 0,
     single_analysis: bool = False,
     paired_analysis: bool = False,

@@ -1,4 +1,4 @@
-import typing
+from typing import Dict, Iterable, List, Optional, Union
 from pathlib import Path
 from itertools import combinations
 from collections import defaultdict
@@ -14,8 +14,8 @@ class Construct(Object):
 
 
 def create_prefix_query(
-    ngrams: typing.Iterable[NGram],
-) -> typing.Dict[str, typing.List[str]]:
+    ngrams: Iterable[NGram],
+) -> Dict[str, List[str]]:
     prefix_query = defaultdict(list)
     for ngram in ngrams:
         prefix = " ".join(ngram.tokens()[:-1])
@@ -24,8 +24,8 @@ def create_prefix_query(
 
 
 def sample_from_prefixes(
-    prefixes: typing.List[str], probs: typing.List[float], seed: int = 42
-) -> typing.Iterable[str]:
+    prefixes: List[str], probs: List[float], seed: int = 42
+) -> Iterable[str]:
     np.random.seed(seed)
     idxs = np.arange(len(prefixes))
     p = np.array(probs)
@@ -37,14 +37,14 @@ def sample_from_prefixes(
 
 
 def create_candidates(
-    ngram_file: typing.Union[str, Path],
-    prefix_file: typing.Optional[typing.Union[str, Path]] = None,
+    ngram_file: Union[str, Path],
+    prefix_file: Optional[Union[str, Path]] = None,
     n_candidates: int = 10_000,
     top_bottom_k: int = 20,
     min_fpm: float = 0,
     disable_tqdm: bool = False,
     seed: int = 42,
-) -> typing.Iterable[StimulusPair]:
+) -> Iterable[StimulusPair]:
     ngrams = (  # type: ignore[misc]
         ngram
         for _, ngram in read_ngram_file(
@@ -99,11 +99,11 @@ def create_candidates(
 
 
 def construct(
-    model_files_folder: typing.Union[str, Path],
-    ngram_file: typing.Union[str, Path],
-    prefix_file: typing.Optional[typing.Union[str, Path]] = None,
-    output_file: typing.Union[str, Path] = "constructed_pairs.csv",
-    max_n: typing.Optional[int] = None,
+    model_files_folder: Union[str, Path],
+    ngram_file: Union[str, Path],
+    prefix_file: Optional[Union[str, Path]] = None,
+    output_file: Union[str, Path] = "constructed_pairs.csv",
+    max_n: Optional[int] = None,
     n_candidates: int = 10_000,
     top_bottom_k: int = 20,
     min_fpm: float = 0,
