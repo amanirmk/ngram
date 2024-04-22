@@ -1,5 +1,5 @@
 import re
-from typing import Iterable, List, Union
+from typing import Iterable, List, Union, Optional
 import string
 from pathlib import Path
 from tqdm import tqdm
@@ -133,14 +133,22 @@ def process_file(file: Union[str, Path], disable_tqdm: bool = False) -> Iterable
 
 def preprocess_files(
     input_folder: Union[str, Path],
-    output_file: Union[str, Path],
+    output_folder: Union[str, Path],
+    combine_files_as: Optional[Union[str, Path]] = None,
     disable_tqdm: bool = False,
 ) -> Path:
     files = list(Path(input_folder).rglob("*.txt"))
-    output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "at", encoding="utf-8") as f:
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    if combine_files_as is not None:
+        output_file = output_folder / combine_files_as
+        with open(output_file, "wt", encoding="utf-8") as f:
+            for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
+                for line in process_file(file, disable_tqdm=True):
+                    f.write(line + "\n")
+    else:
         for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
-            for line in process_file(file, disable_tqdm=True):
-                f.write(line + "\n")
-    return output_file
+            output_file = output_folder / file.relative_to(input_folder)
+            with open(output_file, "wt", encoding="utf-8") as f:
+                for line in process_file(file, disable_tqdm=True):
+                    f.write(line + "\n")

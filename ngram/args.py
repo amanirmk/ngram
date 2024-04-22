@@ -7,24 +7,20 @@ class Arguments:
     action: str = dataclasses.field(default="process")
 
     # folder locations
-    original_corpora: str = dataclasses.field(
+    corpora: str = dataclasses.field(
         default="./data/corpora",
     )
     processed_corpora: str = dataclasses.field(
         default="./data/corpora_processed",
     )
-    model_files: str = dataclasses.field(
-        default="./data/model_files",
-    )
-    kenlm_bin_path: str = dataclasses.field(
-        default="./kenlm/build/bin",
-    )
-    kenlm_tmp_path: str = dataclasses.field(default="./tmp")
     stimuli: str = dataclasses.field(
         default="./data/stimuli",
     )
     stimuli_analyzed: str = dataclasses.field(
         default="./data/stimuli_analyzed",
+    )
+    model_files: str = dataclasses.field(
+        default="./data/model_files",
     )
 
     # general arguments (for all actions)

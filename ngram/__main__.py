@@ -1,8 +1,10 @@
+from pathlib import Path
 from transformers import HfArgumentParser
 
 from ngram.abstract import Object
 from ngram.args import Arguments
-from ngram.processing import process
+from ngram.processing import preprocess_files
+from ngram.model import Model
 from ngram.analysis import analyze
 from ngram.construction import construct
 
@@ -12,29 +14,32 @@ def main() -> None:
         pass
 
     args = HfArgumentParser(Arguments).parse_args()
-    if args.action == "process":
+    if args.action == "preprocess":
         Main.info(
             f"Beginning to process corpora in {args.original_corpora}. "
-            + f"Output will be saved in {args.processed_corpora} and "
-            + f"{args.model_files}."
+            + f"Output will be saved in {args.processed_corpora}"
         )
+        preprocess_files(
+            input_folder=args.corpora,
+            output_folder=args.processed_corpora,
+            combine_files_as=args.combine_files_as,
+            disable_tqdm=args.disable_tqdm,
+        )
+    elif args.action == "train":
         Main.info(
-            f"Building model files {'up to' if args.all_up_to else 'for'} "
-            + f"n={args.max_n}."
+            f"Beginning to train model on {args.processed_corpora}. "
+            + f"Output will be saved in {args.model_files}."
         )
-        process(
-            input_folder=args.original_corpora,
-            processed_corpora_folder=args.processed_corpora,
-            model_output_folder=args.model_files,
-            n=args.max_n,
-            kenlm_bin_path=args.kenlm_bin_path,
-            kenlm_tmp_path=args.kenlm_tmp_path,
-            kenlm_ram_limit_mb=args.kenlm_ram_limit_mb,
-            proxy_n_for_unigram=(2 if args.max_n == 1 else None),
-            filestem=args.processed_filestem,
-            all_up_to=args.all_up_to,
-            prune=args.prune,
+        model = Model(Path(args.model_files) / args.model_name)
+        model.read_from_folder(
+            input_folder=args.processed_corpora,
+            orders=args.orders,
+            include_sentence_boundaries=args.include_sentence_boundaries,
         )
+        if args.prune:
+            model.prune(min_counts=args.min_counts)
+        del model
+
     elif args.action == "analyze":
         Main.info(
             f"Beginning to analyze stimuli in {args.stimuli}. "

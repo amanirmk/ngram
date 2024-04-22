@@ -1,12 +1,6 @@
-from typing import Optional, Tuple, Iterator, Iterable
-from pydantic import BaseModel
+from typing import Optional, Tuple, Iterator, List, Iterable
 from ngram.abstract import Object
 from ngram.processing import tokenize
-
-
-class StimulusPair(BaseModel):
-    high_item: str
-    low_item: str
 
 
 class NGram(Object):
@@ -48,3 +42,13 @@ class NGram(Object):
 
     def text(self) -> str:
         return self._text
+
+    def subgrams(self, order: int, partial: bool = False) -> List["NGram"]:
+        return [
+            NGram(tokens=self[:i], last_n=order)
+            for i in range(1 if partial else order, len(self) + 1)
+        ]
+
+    def to_query(self, order: Optional[int] = None) -> str:
+        o = str(len(self)) if order is None else str(order)
+        return o + "/" + "/".join(self)

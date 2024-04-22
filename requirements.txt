@@ -26,3 +26,4 @@ cmake==3.28.3
 clang==14
 pypi-kenlm==0.1.20220713
 transformers==4.34.0
+h5py==3.11.0
