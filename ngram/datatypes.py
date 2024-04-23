@@ -28,8 +28,8 @@ class NGram(Object):
     def __len__(self) -> int:
         return self._n
 
-    def __getitem__(self, i: int) -> str:
-        return self._tokens[i]
+    def __getitem__(self, key):
+        return self._tokens[key]
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._tokens)

@@ -1,6 +1,4 @@
-from math import log10
-from typing import List, Tuple, Dict, Any, Union, Iterable, Optional, Sequence
-from itertools import combinations
+from typing import List, Tuple, Dict, Any, Union, Iterable, Optional
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -66,13 +64,18 @@ def analyze_sentence(
 
 
 def analyze_sentence_data(
-    model: Model, stimuli: Iterable[str], min_counts: Optional[List[int]] = None
+    model: Model,
+    stimuli: Iterable[str],
+    min_counts: Optional[List[int]] = None,
+    disable_tqdm: bool = False,
 ) -> pd.DataFrame:
     percentile_dict = model.get_percentiles(
         orders=model.orders(), min_counts=min_counts
     )
     analysis = []
-    for stimulus in stimuli:
+    for stimulus in tqdm(
+        stimuli, desc="Analyzing sentences", unit="sentence", disable=disable_tqdm
+    ):
         analysis.append(analyze_sentence(model, stimulus, percentile_dict))
     return pd.DataFrame(analysis)
 
@@ -153,6 +156,7 @@ def analyze_stimulus_pair_data(
     model: Model,
     stimulus_pairs: Iterable[Tuple[str, str]],
     min_counts: Optional[List[int]] = None,
+    disable_tqdm: bool = False,
 ) -> pd.DataFrame:
     percentile_dict = model.get_percentiles(
         orders=model.orders(), min_counts=min_counts
@@ -161,7 +165,9 @@ def analyze_stimulus_pair_data(
         orders=model.orders(), min_counts=min_counts
     )
     analysis = []
-    for stimulus_pair in stimulus_pairs:
+    for stimulus_pair in tqdm(
+        stimulus_pairs, desc="Analyzing pairs", unit="pair", disable=disable_tqdm
+    ):
         analysis.append(
             analyze_stimulus_pair(
                 model, stimulus_pair, percentile_dict, percentile_of_difference_dict
@@ -184,21 +190,27 @@ def goodness_rerank(analyzed_df: pd.DataFrame) -> pd.DataFrame:
 def analyze(
     model_file: Union[str, Path],
     input_file: Union[str, Path],
-    cols: List[str, str],
+    cols: List[str],
     output_file: Union[str, Path],
     min_counts_for_percentile: Optional[List[int]] = None,
+    disable_tqdm: bool = False,
 ) -> None:
     model = Model(model_file, read_only=True)
     if len(cols) == 1:
+        Analyze.info("Analyzing sentences")
         sentences = pd.read_csv(input_file)[cols]
-        analyze_sentence_data(model, sentences, min_counts_for_percentile).to_csv(
-            output_file
-        )
+        analyze_sentence_data(
+            model, sentences, min_counts_for_percentile, disable_tqdm
+        ).to_csv(output_file)
     elif len(cols) == 2:
+        Analyze.info("Analyzing stimulus pairs")
         stimulus_pairs = pd.read_csv(input_file)[cols].itertuples(index=False)
         goodness_rerank(
-            analyze_stimulus_pair_data(model, stimulus_pairs, min_counts_for_percentile)
+            analyze_stimulus_pair_data(
+                model, stimulus_pairs, min_counts_for_percentile, disable_tqdm
+            )
         ).to_csv(output_file)
     else:
         Analyze.error("cols must be a list of one or two column names")
         raise ValueError("cols must be a list of one or two column names")
+    Analyze.info(f"Analysis saved to {output_file}")

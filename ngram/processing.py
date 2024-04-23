@@ -136,7 +136,7 @@ def preprocess_files(
     output_folder: Union[str, Path],
     combine_files_as: Optional[Union[str, Path]] = None,
     disable_tqdm: bool = False,
-) -> Path:
+) -> None:
     files = list(Path(input_folder).rglob("*.txt"))
     output_folder = Path(output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)

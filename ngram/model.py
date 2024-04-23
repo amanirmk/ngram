@@ -23,11 +23,28 @@ class Model(Object):
         self._model.close()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self._model_file.stem}, orders={self.orders()}, read_only={self._model.mode == 'r'})"
+        return (
+            f"{self.__class__.__name__}({self._model_file.stem}, "
+            + f"orders={self.orders()}, read_only={self._model.mode == 'r'})"
+        )
 
     def orders(self) -> List[int]:
         keys = self._model.keys()
         return sorted(int(key) for key in keys if key != Model.COUNT)
+
+    def read_from(
+        self,
+        thing_to_read: Union[str, Path],
+        orders: Optional[List[int]] = None,
+        include_sentence_boundaries: bool = False,
+    ) -> None:
+        thing_to_read = Path(thing_to_read)
+        if thing_to_read.is_dir():
+            self.read_from_folder(thing_to_read, orders, include_sentence_boundaries)
+        elif thing_to_read.is_file():
+            self.read_from_text(thing_to_read, orders, include_sentence_boundaries)
+        else:
+            Model.error(f"Cannot read from {thing_to_read}")
 
     def read_from_folder(
         self,
@@ -93,7 +110,7 @@ class Model(Object):
     @staticmethod
     def _prune(current_group: h5py.Group, min_count: int) -> None:
         for key in list(current_group.keys()):
-            if key == Model.COUNT or key == Model.UNK:
+            if key in [Model.COUNT, Model.UNK]:
                 continue
             token_group = current_group[key]
             count = token_group[Model.COUNT][()]
@@ -112,18 +129,24 @@ class Model(Object):
         breadth_first: bool = False,
         shuffle: bool = False,
         seed: Optional[int] = None,
-    ) -> Iterator[NGram]:
+        with_counts: bool = False,
+    ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
         if order not in self.orders():
             Model.error(f"Order {order} not found in model")
             raise ValueError(f"Order {order} not found in model")
         if seed is not None:
             np.random.seed(seed)
-        return Model._traverse(self._model[str(order)], breadth_first, shuffle)
+        return Model._traverse(
+            self._model[str(order)], breadth_first, shuffle, with_counts
+        )
 
     @staticmethod
     def _traverse(
-        group: h5py.Group, breadth_first: bool = False, shuffle: bool = False
-    ) -> Iterator[NGram]:
+        group: h5py.Group,
+        breadth_first: bool = False,
+        shuffle: bool = False,
+        with_counts: bool = False,
+    ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
         groups = deque([group])
         while groups:
             if breadth_first:
@@ -133,13 +156,16 @@ class Model(Object):
             tokens = [
                 key
                 for key in current_group.keys()
-                if key != Model.COUNT and key != Model.UNK
+                if key not in [Model.COUNT, Model.UNK]
             ]
             if len(tokens) == 0:
-                yield (
-                    NGram(tokens=current_group.name.split("/")[2:]),
-                    current_group[Model.COUNT][()],
-                )
+                if with_counts:
+                    yield (
+                        NGram(tokens=current_group.name.split("/")[2:]),
+                        current_group[Model.COUNT][()],
+                    )
+                else:
+                    yield NGram(tokens=current_group.name.split("/")[2:])
             else:
                 if shuffle:
                     np.random.shuffle(tokens)
@@ -204,6 +230,7 @@ class Model(Object):
                 if prob > 0:
                     return prob, orders[order_idx]
                 order_idx -= 1
+            return 0.0, 0
 
         orders = [o for o in self.orders() if o <= len(ngram)]
         result = get_prob(ngram, orders)
@@ -254,10 +281,10 @@ class Model(Object):
             raise ValueError(f"Order {order} not found in model")
         if any(o not in orders for o in range(1, order)):
             Model.error(
-                f"Generation requires all lower orders to be present in the model"
+                "Generation requires all lower orders to be present in the model"
             )
             raise ValueError(
-                f"Generation requires all lower orders to be present in the model"
+                "Generation requires all lower orders to be present in the model"
             )
 
         tokens = []
@@ -290,29 +317,44 @@ class Model(Object):
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
         if min_counts is None:
             min_counts = [0] * len(orders)
-        if len(orders) != len(min_counts):
-            Model.error("Length of orders and min_counts must be the same")
-            raise ValueError("Length of orders and min_counts must be the same")
+
+        if len(min_counts) < len(orders):
+            min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
+
         percentile_dict = {}
         pctiles = np.linspace(0, 100, num=num)
         for order, min_count in zip(orders, min_counts):
             counts = np.array(
-                [count for _, count in self.iterate_ngrams(order) if count >= min_count]
+                [
+                    count
+                    for _, count in self.iterate_ngrams(order, with_counts=True)
+                    if count >= min_count  # type: ignore[operator]
+                ]
             )
             pctile_vals = np.percentile(counts, pctiles)
             percentile_dict[order] = (pctile_vals, pctiles)
         return percentile_dict
 
     def get_percentiles_of_pairwise_differences(
-        self, orders: List[int], min_counts: List[int], num_bins: int = 10_000
+        self,
+        orders: List[int],
+        min_counts: Optional[List[int]] = None,
+        num_bins: int = 10_000,
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
-        if len(orders) != len(min_counts):
-            Model.error("Length of orders and min_counts must be the same")
-            raise ValueError("Length of orders and min_counts must be the same")
+        if min_counts is None:
+            min_counts = [0] * len(orders)
+
+        if len(min_counts) < len(orders):
+            min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
+
         percentile_dict = {}
         for order, min_count in zip(orders, min_counts):
             counts = np.array(
-                [count for _, count in self.iterate_ngrams(order) if count >= min_count]
+                [
+                    count
+                    for _, count in self.iterate_ngrams(order, with_counts=True)
+                    if count >= min_count  # type: ignore[operator]
+                ]
             )
             # lognormal data, so better bins in log space
             logcounts = np.log10(counts)

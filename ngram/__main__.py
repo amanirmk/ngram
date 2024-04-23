@@ -31,48 +31,44 @@ def main() -> None:
             + f"Output will be saved in {args.model_files}."
         )
         model = Model(Path(args.model_files) / args.model_name)
-        model.read_from_folder(
-            input_folder=args.processed_corpora,
+        if args.read_from is None:
+            args.read_from = args.processed_corpora
+        model.read_from(
+            thing_to_read=args.read_from,
             orders=args.orders,
             include_sentence_boundaries=args.include_sentence_boundaries,
         )
-        if args.prune:
+        if args.min_counts is not None:
             model.prune(min_counts=args.min_counts)
         del model
-
     elif args.action == "analyze":
-        Main.info(
-            f"Beginning to analyze stimuli in {args.stimuli}. "
-            + f"Output will be saved in {args.stimuli_analyzed}."
-        )
+        Main.info(f"Beginning to analyze stimuli in {args.stimuli}.")
+        if args.analyzed_file is None:
+            args.analyzed_file = (
+                Path(args.stimuli_analyzed) / Path(args.stimuli_file).name
+            )
         analyze(
-            input_folder=args.stimuli,
-            output_folder=args.stimuli_analyzed,
-            model_files_folder=args.model_files,
+            model_file=args.model_file,
+            input_file=args.stimuli_file,
             cols=args.columns_for_analysis,
-            max_n=args.max_n,
-            percentile_min_fpm=args.percentile_min_fpm,
-            single_analysis=args.do_single_analysis,
-            paired_analysis=args.do_paired_analysis,
-            pairwise_analysis=args.do_pairwise_analysis,
+            output_file=args.analyzed_file,
+            min_counts_for_percentile=args.min_counts_for_percentile,
             disable_tqdm=args.disable_tqdm,
         )
     elif args.action == "construct":
         Main.info(
-            f"Beginning to construct stimuli pairs from {args.ngram_file}. "
+            f"Beginning to construct stimuli pairs with model={args.model_file}. "
             + f"Output will be saved in {args.constructed_pairs_csv}."
         )
         construct(
-            model_files_folder=args.model_files,
-            ngram_file=args.ngram_file,
-            prefix_file=args.prefix_file,
+            model_file=args.model_file,
             output_file=args.constructed_pairs_csv,
-            max_n=args.max_n,
+            length=args.length,
             n_candidates=args.n_candidates,
-            top_bottom_k=args.top_bottom_k,
-            min_fpm=args.percentile_min_fpm,
-            disable_tqdm=args.disable_tqdm,
+            max_per_prefix=args.max_per_prefix,
+            min_counts_for_percentile=args.min_counts_for_percentile,
             seed=args.sampling_seed,
+            disable_tqdm=args.disable_tqdm,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")
