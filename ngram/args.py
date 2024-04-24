@@ -50,14 +50,14 @@ class Arguments:
     #   -----------------------------------
 
     # name of the model
-    model_name: str = dataclasses.field(default="model")
+    model_name: str = dataclasses.field(default="model_4_attrs")
 
     # file or folder containing preprocessed corpora
     # (none assumes args.processed_corpora)
     read_from: Optional[Union[str, Path]] = dataclasses.field(default=None)
 
     # which orders to compute statistics for
-    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 6)))
+    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 5)))
 
     # whether to <s> and </s> in the model
     include_sentence_boundaries: bool = dataclasses.field(default=False)
