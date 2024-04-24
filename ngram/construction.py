@@ -35,15 +35,18 @@ def construct_candidates(
     ):
         query = prefix.to_query(order=length)  # type: ignore[union-attr]
         group = model._model.get(query)
-        ngrams = islice(
-            model._traverse(group, breadth_first=True, shuffle=True, with_counts=False),
-            max_per_prefix,
-        )
-        for n1, n2 in combinations(ngrams, 2):
-            if len(candidate_pairs) >= n_candidates:
-                break
-            candidate_pairs.append((n1.text(), n2.text()))  # type: ignore[attr-defined]
-            pbar.update(1)
+        if group is not None:
+            ngrams = islice(
+                model._traverse(
+                    group, breadth_first=True, shuffle=True, with_counts=False
+                ),
+                max_per_prefix,
+            )
+            for n1, n2 in combinations(ngrams, 2):
+                if len(candidate_pairs) >= n_candidates:
+                    break
+                candidate_pairs.append((n1.text(), n2.text()))  # type: ignore[attr-defined]
+                pbar.update(1)
     return pd.DataFrame(candidate_pairs, columns=["high_item", "low_item"])
 
 

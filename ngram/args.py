@@ -12,7 +12,7 @@ class Arguments:
     # which pipeline to use
     action: str = dataclasses.field(default="preprocess")
 
-    # whether to use tqdm
+    # whether to disable tqdm
     disable_tqdm: bool = dataclasses.field(default=False)
 
     # folder locations
@@ -99,7 +99,7 @@ class Arguments:
 
     # output file
     constructed_pairs_csv: Union[str, Path] = dataclasses.field(
-        default="./data/stimuli/constructed_pairs.csv"
+        default="./data/stimuli_constructed/constructed_pairs.csv"
     )
 
     # length of the sentences to construct

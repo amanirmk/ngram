@@ -16,7 +16,7 @@ def main() -> None:
     args = HfArgumentParser(Arguments).parse_args()
     if args.action == "preprocess":
         Main.info(
-            f"Beginning to process corpora in {args.original_corpora}. "
+            f"Beginning to process corpora in {args.corpora}. "
             + f"Output will be saved in {args.processed_corpora}"
         )
         preprocess_files(
@@ -37,12 +37,13 @@ def main() -> None:
             thing_to_read=args.read_from,
             orders=args.orders,
             include_sentence_boundaries=args.include_sentence_boundaries,
+            disable_tqdm=args.disable_tqdm,
         )
         if args.min_counts is not None:
             model.prune(min_counts=args.min_counts)
         del model
     elif args.action == "analyze":
-        Main.info(f"Beginning to analyze stimuli in {args.stimuli}.")
+        Main.info(f"Beginning to analyze stimuli in {args.stimuli_file}.")
         if args.analyzed_file is None:
             args.analyzed_file = (
                 Path(args.stimuli_analyzed) / Path(args.stimuli_file).name

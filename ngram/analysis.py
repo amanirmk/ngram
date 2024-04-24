@@ -130,7 +130,7 @@ def analyze_stimulus_pair(
         )
         analysis[f"percentile_of_difference_{order}"] = pdiff
         analysis[f"ngram_oov_{order}"] = (
-            item1["fpm_{order}"] == 0 or item2["fpm_{order}"] == 0
+            item1[f"fpm_{order}"] == 0 or item2[f"fpm_{order}"] == 0
         )
         item1_analysis.update(item1)
         item2_analysis.update(item2)
@@ -181,7 +181,7 @@ def goodness_rerank(analyzed_df: pd.DataFrame) -> pd.DataFrame:
     cols.sort()
     to_minimize = analyzed_df[cols[:-1]].max(axis=1)
     to_maximize = analyzed_df[cols[-1]]
-    goodness = to_minimize - to_maximize
+    goodness = to_maximize - to_minimize
     analyzed_df["goodness"] = goodness
     analyzed_df.sort_values("goodness", ascending=False, inplace=True)
     return analyzed_df

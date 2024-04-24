@@ -1,9 +1,10 @@
-from math import log10
+from math import log10, inf
 from typing import Union, List, Optional, Iterator, Tuple, Dict
 from pathlib import Path
 from collections import defaultdict, deque
 import h5py
 import numpy as np
+from tqdm import tqdm
 from ngram.abstract import Object
 from ngram.processing import tokenize
 from ngram.datatypes import NGram
@@ -37,12 +38,17 @@ class Model(Object):
         thing_to_read: Union[str, Path],
         orders: Optional[List[int]] = None,
         include_sentence_boundaries: bool = False,
+        disable_tqdm: bool = True,
     ) -> None:
         thing_to_read = Path(thing_to_read)
         if thing_to_read.is_dir():
-            self.read_from_folder(thing_to_read, orders, include_sentence_boundaries)
+            self.read_from_folder(
+                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+            )
         elif thing_to_read.is_file():
-            self.read_from_text(thing_to_read, orders, include_sentence_boundaries)
+            self.read_from_text(
+                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+            )
         else:
             Model.error(f"Cannot read from {thing_to_read}")
 
@@ -51,8 +57,14 @@ class Model(Object):
         folder: Union[str, Path],
         orders: Optional[List[int]] = None,
         include_sentence_boundaries: bool = False,
+        disable_tqdm: bool = True,
     ) -> None:
-        for file in Path(folder).rglob("*.txt"):
+        for file in tqdm(
+            list(Path(folder).rglob("*.txt")),
+            desc="Reading from folder",
+            unit="file",
+            disable=disable_tqdm,
+        ):
             self.read_from_text(file, orders, include_sentence_boundaries)
 
     def read_from_text(
@@ -60,6 +72,7 @@ class Model(Object):
         text_file: Union[str, Path],
         orders: Optional[List[int]] = None,
         include_sentence_boundaries: bool = False,
+        disable_tqdm: bool = True,
     ) -> None:
         if orders is None:
             Model.info("No orders specified, using orders from existing model")
@@ -74,8 +87,19 @@ class Model(Object):
         for order in orders:
             group = self._model.require_group(str(order))
             group.require_dataset(Model.COUNT, shape=(), dtype=int, exact=True)
+
+        num_lines = 0
+        if not disable_tqdm:
+            with open(text_file, "rb") as f:
+                num_lines = sum(1 for _ in f)
         with open(text_file, "rt", encoding="utf-8") as f:
-            for line in f:
+            for line in tqdm(
+                f,
+                total=num_lines,
+                desc="Reading from text",
+                unit="line",
+                disable=disable_tqdm,
+            ):
                 self._read_from_line(line, orders, include_sentence_boundaries)
 
     def _read_from_line(
@@ -252,7 +276,8 @@ class Model(Object):
             for subgram in ngram.subgrams(len(ngram), partial=True)
         ]
         result = [
-            (token, log10(prob), order, is_unk) for token, prob, order, is_unk in result
+            (token, log10(prob) if prob else -inf, order, is_unk)
+            for token, prob, order, is_unk in result
         ]
         return result
 
@@ -260,6 +285,7 @@ class Model(Object):
         # uses stupid backoff (with whatever orders present in model)
         # using alpha=0.4 from Google paper (Brants et al., 2007)
         # could probably get a heuristic for alpha based on data
+        assert alpha > 0.0, "Alpha must be greater than 0"
         max_order = max(o for o in self.orders() if o <= len(ngram))
         total_logprob = 0.0
         for _, logprob, order, _ in self.logprobs_per_token(ngram):
