@@ -31,7 +31,7 @@ class Model(Object):
 
     def orders(self) -> List[int]:
         keys = self._model.keys()
-        return sorted(int(key) for key in keys if key != Model.COUNT)
+        return sorted(int(key) for key in keys)
 
     def read_from(
         self,
@@ -86,7 +86,8 @@ class Model(Object):
             )
         for order in orders:
             group = self._model.require_group(str(order))
-            group.require_dataset(Model.COUNT, shape=(), dtype=int, exact=True)
+            if Model.COUNT not in group.attrs:
+                group.attrs[Model.COUNT] = 0
 
         num_lines = 0
         if not disable_tqdm:
@@ -112,7 +113,7 @@ class Model(Object):
         for order in orders:
             order_group = self._model.get(str(order))
             for subgram in ngram.subgrams(order):
-                order_group[Model.COUNT][()] += 1
+                order_group.attrs[Model.COUNT] += 1
                 self._add_ngram(order_group, subgram)
 
     @staticmethod
@@ -120,8 +121,9 @@ class Model(Object):
         if index < len(ngram):
             token = ngram[index]
             token_group = current_group.require_group(token)
-            token_group.require_dataset(Model.COUNT, shape=(), dtype=int, exact=True)
-            token_group[Model.COUNT][()] += 1
+            if Model.COUNT not in token_group.attrs:
+                token_group.attrs[Model.COUNT] = 0
+            token_group.attrs[Model.COUNT] += 1
             Model._add_ngram(token_group, ngram, index + 1)
 
     def prune(self, min_counts: List[int]) -> None:
@@ -134,15 +136,15 @@ class Model(Object):
     @staticmethod
     def _prune(current_group: h5py.Group, min_count: int) -> None:
         for key in list(current_group.keys()):
-            if key in [Model.COUNT, Model.UNK]:
+            if key == Model.UNK:
                 continue
             token_group = current_group[key]
-            count = token_group[Model.COUNT][()]
+            count = token_group.attrs[Model.COUNT]
             if count < min_count:
-                unk_count = current_group.require_group(Model.UNK).require_dataset(
-                    Model.COUNT, shape=(), dtype=int, exact=True
-                )
-                unk_count[()] += count
+                unk_group = current_group.require_group(Model.UNK)
+                if Model.COUNT not in unk_group.attrs:
+                    unk_group.attrs[Model.COUNT] = 0
+                unk_group.attrs[Model.COUNT] += count
                 del current_group[key]
             else:
                 Model._prune(token_group, min_count)
@@ -177,16 +179,12 @@ class Model(Object):
                 current_group = groups.popleft()
             else:
                 current_group = groups.pop()
-            tokens = [
-                key
-                for key in current_group.keys()
-                if key not in [Model.COUNT, Model.UNK]
-            ]
+            tokens = [key for key in current_group.keys() if key != Model.UNK]
             if len(tokens) == 0:
                 if with_counts:
                     yield (
                         NGram(tokens=current_group.name.split("/")[2:]),
-                        current_group[Model.COUNT][()],
+                        current_group.attrs[Model.COUNT],
                     )
                 else:
                     yield NGram(tokens=current_group.name.split("/")[2:])
@@ -197,17 +195,16 @@ class Model(Object):
                     groups.append(current_group[token])
 
     def get_count(self, ngram: NGram) -> int:
-        count_query = ngram.to_query() + "/" + Model.COUNT
-        count = self._model.get(count_query)
-        if count is None:
+        group = self._model.get(ngram.to_query())
+        if group is None:
             return 0
-        return count[()]
+        return group.attrs[Model.COUNT]
 
     def get_frequency(self, ngram: NGram) -> float:
         count = self.get_count(ngram)
         if count == 0:
             return 0.0
-        total = self._model[str(len(ngram))][Model.COUNT][()]
+        total = self._model[str(len(ngram))].attrs[Model.COUNT]
         return count / total
 
     def get_fpm(self, ngram: NGram) -> float:
@@ -222,11 +219,9 @@ class Model(Object):
             group = self._model[str(order)]
         if group is None:
             return {}
-        total = group[Model.COUNT][()]
+        total = group.attrs[Model.COUNT]
         next_tokens = {
-            key: group[key][Model.COUNT][()] / total
-            for key in group.keys()
-            if key != Model.COUNT
+            key: group[key].attrs[Model.COUNT] / total for key in group.keys()
         }
         return next_tokens
 
@@ -242,7 +237,7 @@ class Model(Object):
         token_group = group.get(ngram[-1])
         if token_group is None:
             return 0.0
-        return token_group[Model.COUNT][()] / group[Model.COUNT][()]
+        return token_group.attrs[Model.COUNT] / group.attrs[Model.COUNT]
 
     def conditional_probability_with_backoff(
         self, ngram: NGram
