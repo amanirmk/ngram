@@ -142,6 +142,7 @@ def preprocess_files(
     output_folder.mkdir(parents=True, exist_ok=True)
     if combine_files_as is not None:
         output_file = output_folder / combine_files_as
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, "wt", encoding="utf-8") as f:
             for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
                 for line in process_file(file, disable_tqdm=True):
@@ -149,6 +150,7 @@ def preprocess_files(
     else:
         for file in tqdm(files, desc="Preprocessing files", disable=disable_tqdm):
             output_file = output_folder / file.relative_to(input_folder)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
             with open(output_file, "wt", encoding="utf-8") as f:
                 for line in process_file(file, disable_tqdm=True):
                     f.write(line + "\n")
