@@ -36,7 +36,7 @@ mypy : env
 	--ignore-missing-imports
 pylint : env
 	@pylint $(PACKAGE) \
-	--disable C0112,C0113,C0114,C0115,C0116 \
+	--disable C0112,C0113,C0114,C0115,C0116,R1710,R0903,R0913,R0914,C0200,R0902 \
 	|| pylint-exit $$?
 black : env
 	@black --check .

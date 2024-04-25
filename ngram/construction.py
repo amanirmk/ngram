@@ -34,7 +34,7 @@ def construct_candidates(
         order=length - 1, breadth_first=True, shuffle=True, with_counts=False
     ):
         query = prefix.to_query(order=length)  # type: ignore[union-attr]
-        group = model._model.get(query)
+        group = model._get_group(query)
         if group is not None:
             ngrams = islice(
                 model._traverse(
@@ -59,8 +59,11 @@ def construct(
     min_counts_for_percentile: Optional[List[int]] = None,
     seed: Optional[int] = None,
     disable_tqdm: bool = False,
+    load_into_memory: bool = True,
 ):
     model = Model(model_file, read_only=True)
+    if load_into_memory:
+        model.load_into_memory()
     construct_candidates(
         model=model,
         length=length,

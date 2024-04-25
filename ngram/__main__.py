@@ -41,7 +41,7 @@ def main() -> None:
         )
         if args.min_counts is not None:
             model.prune(min_counts=args.min_counts)
-        del model
+        model.save()
     elif args.action == "analyze":
         Main.info(f"Beginning to analyze stimuli in {args.stimuli_file}.")
         if args.analyzed_file is None:
@@ -55,6 +55,7 @@ def main() -> None:
             output_file=args.analyzed_file,
             min_counts_for_percentile=args.min_counts_for_percentile,
             disable_tqdm=args.disable_tqdm,
+            load_into_memory=args.load_into_memory,
         )
     elif args.action == "construct":
         Main.info(
@@ -70,6 +71,7 @@ def main() -> None:
             min_counts_for_percentile=args.min_counts_for_percentile,
             seed=args.sampling_seed,
             disable_tqdm=args.disable_tqdm,
+            load_into_memory=args.load_into_memory,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")

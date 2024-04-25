@@ -194,8 +194,11 @@ def analyze(
     output_file: Union[str, Path],
     min_counts_for_percentile: Optional[List[int]] = None,
     disable_tqdm: bool = False,
+    load_into_memory: bool = True,
 ) -> None:
     model = Model(model_file, read_only=True)
+    if load_into_memory:
+        model.load_into_memory()
     if len(cols) == 1:
         Analyze.info("Analyzing sentences")
         sentences = pd.read_csv(input_file)[cols]

@@ -51,4 +51,4 @@ class NGram(Object):
 
     def to_query(self, order: Optional[int] = None) -> str:
         o = str(len(self)) if order is None else str(order)
-        return o + "/" + "/".join(self)
+        return o + "." + ".".join(self)

@@ -2,7 +2,8 @@ from math import log10, inf
 from typing import Union, List, Optional, Iterator, Tuple, Dict
 from pathlib import Path
 from collections import defaultdict, deque
-import h5py
+import json
+import ijson
 import numpy as np
 from tqdm import tqdm
 from ngram.abstract import Object
@@ -16,22 +17,89 @@ class Model(Object):
     EOS = "</S>"
     COUNT = "COUNT"
 
-    def __init__(self, model_file: Union[str, Path], read_only: bool = False) -> None:
+    def __init__(
+        self,
+        model_file: Union[str, Path],
+        read_only: bool = False,
+        autosave: bool = False,
+    ) -> None:
         self._model_file = Path(model_file)
-        self._model = h5py.File(model_file, "r" if read_only else "a")
-
-    def __del__(self) -> None:
-        self._model.close()
+        self._read_only = read_only
+        self._autosave = autosave
+        self._model: Optional[dict] = None
+        self._orders: Optional[List[int]] = None
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}({self._model_file.stem}, "
-            + f"orders={self.orders()}, read_only={self._model.mode == 'r'})"
+            + f"orders={self.orders()}, read_only={self._read_only})"
         )
 
+    def __del__(self) -> None:
+        if not self._read_only and self._autosave:
+            if self._model is not None:
+                try:
+                    self.save()
+                    Model.info("Auto-saved model.")
+                except:
+                    Model.error(
+                        "Unable to auto-save model. "
+                        + "This is typically caused by quitting Python."
+                    )
+
+    def save(self, model_file: Optional[Union[str, Path]] = None) -> None:
+        self._require_model()
+        if model_file is None or Path(model_file) == self._model_file:
+            if self._read_only:
+                Model.error("Model is read-only")
+                raise ValueError("Model is read-only")
+            with open(self._model_file, "w", encoding="utf-8") as f:
+                json.dump(self._model, f)
+        else:
+            with open(model_file, "w", encoding="utf-8") as f:
+                json.dump(self._model, f)
+
+    def load_into_memory(self) -> None:
+        self._require_model()
+
+    def _require_model(self) -> None:
+        if self._model is None:
+            if not self._model_file.exists():
+                self._model = {}
+            else:
+                with open(self._model_file, "r", encoding="utf-8") as f:
+                    self._model = json.load(f)
+
+    @staticmethod
+    def _require_group(group: dict, key: Union[int, str]) -> dict:
+        return group.setdefault(str(key), {Model.COUNT: 0})
+
+    def _get_group(self, query: str) -> Optional[dict]:
+        if self._model is not None:
+            return self._get_group_from_model(query)
+        with open(self._model_file, "rb") as f:
+            try:
+                group = next(ijson.items(f, query))
+            except:
+                group = None
+            return group
+
+    def _get_group_from_model(self, query: str) -> Optional[dict]:
+        assert self._model is not None
+        group: Optional[dict] = self._model
+        for key in query.split("."):
+            if group is None:
+                return None
+            group = group.get(key)
+        return group
+
     def orders(self) -> List[int]:
-        keys = self._model.keys()
-        return sorted(int(key) for key in keys)
+        if self._model is not None:
+            return sorted([int(k) for k in self._model.keys()])
+        if self._orders is None:
+            with open(self._model_file, "rb") as f:
+                self._orders = sorted(list(int(k) for k, _ in ijson.kvitems(f, "")))
+        return self._orders
 
     def read_from(
         self,
@@ -50,7 +118,10 @@ class Model(Object):
                 thing_to_read, orders, include_sentence_boundaries, disable_tqdm
             )
         else:
-            Model.error(f"Cannot read from {thing_to_read}")
+            Model.error(
+                f"Cannot read from {thing_to_read}. "
+                + "Currently only files and folders are supported."
+            )
 
     def read_from_folder(
         self,
@@ -74,20 +145,13 @@ class Model(Object):
         include_sentence_boundaries: bool = False,
         disable_tqdm: bool = True,
     ) -> None:
+        self._require_model()
         if orders is None:
-            Model.info("No orders specified, using orders from existing model")
+            Model.info("No orders specified, using orders from model.")
             orders = self.orders()
         if len(orders) == 0:
-            Model.error(
-                "No orders specified and no orders present in the existing model"
-            )
-            raise ValueError(
-                "No orders specified and no orders present in the existing model"
-            )
-        for order in orders:
-            group = self._model.require_group(str(order))
-            if Model.COUNT not in group.attrs:
-                group.attrs[Model.COUNT] = 0
+            Model.error("No orders specified and no orders present in the model.")
+            raise ValueError("No orders specified and no orders present in the model.")
 
         num_lines = 0
         if not disable_tqdm:
@@ -106,45 +170,46 @@ class Model(Object):
     def _read_from_line(
         self, line: str, orders: List[int], include_sentence_boundaries: bool
     ) -> None:
+        assert self._model is not None
         tokens = tokenize(line)
         if include_sentence_boundaries:
             tokens = [Model.BOS] + tokens + [Model.EOS]
         ngram = NGram(tokens=tokens)
         for order in orders:
-            order_group = self._model.get(str(order))
+            order_group = Model._require_group(self._model, order)
             for subgram in ngram.subgrams(order):
-                order_group.attrs[Model.COUNT] += 1
+                order_group[Model.COUNT] += 1
                 self._add_ngram(order_group, subgram)
 
     @staticmethod
-    def _add_ngram(current_group: h5py.Group, ngram: NGram, index: int = 0) -> None:
+    def _add_ngram(current_group: dict, ngram: NGram, index: int = 0) -> None:
         if index < len(ngram):
             token = ngram[index]
-            token_group = current_group.require_group(token)
-            if Model.COUNT not in token_group.attrs:
-                token_group.attrs[Model.COUNT] = 0
-            token_group.attrs[Model.COUNT] += 1
+            token_group = Model._require_group(current_group, token)
+            token_group[Model.COUNT] += 1
             Model._add_ngram(token_group, ngram, index + 1)
 
     def prune(self, min_counts: List[int]) -> None:
+        self._require_model()
+        assert self._model is not None
         orders = self.orders()
         # pad min_counts with the last value to match the number of orders
         min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
         for order in orders:
-            Model._prune(self._model[str(order)], min_counts[order - 1])
+            Model._prune(
+                Model._require_group(self._model, order), min_counts[order - 1]
+            )
 
     @staticmethod
-    def _prune(current_group: h5py.Group, min_count: int) -> None:
+    def _prune(current_group: dict, min_count: int) -> None:
         for key in list(current_group.keys()):
-            if key == Model.UNK:
+            if key in [Model.UNK, Model.COUNT]:
                 continue
             token_group = current_group[key]
-            count = token_group.attrs[Model.COUNT]
+            count = token_group[Model.COUNT]
             if count < min_count:
-                unk_group = current_group.require_group(Model.UNK)
-                if Model.COUNT not in unk_group.attrs:
-                    unk_group.attrs[Model.COUNT] = 0
-                unk_group.attrs[Model.COUNT] += count
+                unk_group = Model._require_group(current_group, Model.UNK)
+                unk_group[Model.COUNT] += count
                 del current_group[key]
             else:
                 Model._prune(token_group, min_count)
@@ -158,53 +223,60 @@ class Model(Object):
         with_counts: bool = False,
     ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
         if order not in self.orders():
-            Model.error(f"Order {order} not found in model")
-            raise ValueError(f"Order {order} not found in model")
+            Model.error(f"Order {order} not found in model.")
+            raise ValueError(f"Order {order} not found in model.")
         if seed is not None:
             np.random.seed(seed)
-        return Model._traverse(
-            self._model[str(order)], breadth_first, shuffle, with_counts
-        )
+        group = self._get_group(str(order))
+        assert group is not None
+        return Model._traverse(group, breadth_first, shuffle, with_counts)
 
     @staticmethod
     def _traverse(
-        group: h5py.Group,
+        group: dict,
         breadth_first: bool = False,
         shuffle: bool = False,
         with_counts: bool = False,
     ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
-        groups = deque([group])
+        groups: deque = deque([(group, [])])
         while groups:
             if breadth_first:
-                current_group = groups.popleft()
+                current_group, current_tokens = groups.popleft()
             else:
-                current_group = groups.pop()
-            tokens = [key for key in current_group.keys() if key != Model.UNK]
-            if len(tokens) == 0:
+                current_group, current_tokens = groups.pop()
+            next_tokens = [key for key in current_group.keys() if key != Model.COUNT]
+            if len(next_tokens) == 0:
                 if with_counts:
                     yield (
-                        NGram(tokens=current_group.name.split("/")[2:]),
-                        current_group.attrs[Model.COUNT],
+                        NGram(tokens=current_tokens),
+                        current_group[Model.COUNT],
                     )
                 else:
-                    yield NGram(tokens=current_group.name.split("/")[2:])
+                    yield NGram(tokens=current_tokens)
             else:
                 if shuffle:
-                    np.random.shuffle(tokens)
-                for token in tokens:
-                    groups.append(current_group[token])
+                    np.random.shuffle(next_tokens)
+                for token in next_tokens:
+                    if token != Model.UNK:
+                        groups.append((current_group[token], current_tokens + [token]))
 
     def get_count(self, ngram: NGram) -> int:
-        group = self._model.get(ngram.to_query())
+        group = self._get_group(ngram.to_query())
         if group is None:
             return 0
-        return group.attrs[Model.COUNT]
+        return group[Model.COUNT]
+
+    def get_order_count(self, order: int) -> int:
+        group = self._get_group(str(order))
+        if group is None:
+            return 0
+        return group[Model.COUNT]
 
     def get_frequency(self, ngram: NGram) -> float:
         count = self.get_count(ngram)
         if count == 0:
             return 0.0
-        total = self._model[str(len(ngram))].attrs[Model.COUNT]
+        total = self.get_order_count(len(ngram))
         return count / total
 
     def get_fpm(self, ngram: NGram) -> float:
@@ -214,14 +286,16 @@ class Model(Object):
         assert order in self.orders(), f"Order {order} not found in model"
         if order > 1:
             last_k = NGram(tokens=ngram[-order + 1 :])
-            group = self._model.get(last_k.to_query(order))
+            group = self._get_group(last_k.to_query(order))
         else:
-            group = self._model[str(order)]
+            group = self._get_group(str(order))
         if group is None:
             return {}
-        total = group.attrs[Model.COUNT]
+        total = group[Model.COUNT]
         next_tokens = {
-            key: group[key].attrs[Model.COUNT] / total for key in group.keys()
+            key: group[key][Model.COUNT] / total
+            for key in group.keys()
+            if key != Model.COUNT
         }
         return next_tokens
 
@@ -229,15 +303,15 @@ class Model(Object):
         assert order in self.orders(), f"Order {order} not found in model"
         if order > 1:
             last_k = NGram(tokens=ngram[-order:-1])
-            group = self._model.get(last_k.to_query(order))
+            group = self._get_group(last_k.to_query(order))
         else:
-            group = self._model[str(order)]
+            group = self._get_group(str(order))
         if group is None:
             return 0.0
         token_group = group.get(ngram[-1])
         if token_group is None:
             return 0.0
-        return token_group.attrs[Model.COUNT] / group.attrs[Model.COUNT]
+        return token_group[Model.COUNT] / group[Model.COUNT]
 
     def conditional_probability_with_backoff(
         self, ngram: NGram
@@ -298,21 +372,21 @@ class Model(Object):
         if order is None:
             order = max(orders)
         if order not in orders:
-            Model.error(f"Order {order} not found in model")
-            raise ValueError(f"Order {order} not found in model")
+            Model.error(f"Order {order} not found in model.")
+            raise ValueError(f"Order {order} not found in model.")
         if any(o not in orders for o in range(1, order)):
-            Model.error(
-                "Generation requires all lower orders to be present in the model"
-            )
+            Model.error("Generation requires that all lower orders are in the model.")
             raise ValueError(
-                "Generation requires all lower orders to be present in the model"
+                "Generation requires that all lower orders are in the model."
             )
 
         tokens = []
         if from_bos:
-            if Model.BOS not in self._model[str(order)]:
-                Model.error(f"Model does not contain {Model.BOS} tokens")
-                raise ValueError(f"Model does not contain {Model.BOS} tokens")
+            group = self._get_group(str(order))
+            assert group is not None
+            if Model.BOS not in group:
+                Model.error(f"Model does not contain {Model.BOS} tokens.")
+                raise ValueError(f"Model does not contain {Model.BOS} tokens.")
             tokens.append(Model.BOS)
         if seed:
             np.random.seed(seed)
@@ -337,19 +411,18 @@ class Model(Object):
         self, orders: List[int], min_counts: Optional[List[int]] = None, num: int = 400
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
         if min_counts is None:
-            min_counts = [0] * len(orders)
-
-        if len(min_counts) < len(orders):
+            min_counts = [0] * max(orders)
+        elif len(min_counts) < max(orders):
             min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
 
         percentile_dict = {}
         pctiles = np.linspace(0, 100, num=num)
-        for order, min_count in zip(orders, min_counts):
+        for order in orders:
             counts = np.array(
                 [
                     count
                     for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_count  # type: ignore[operator]
+                    if count >= min_counts[order]  # type: ignore[operator]
                 ]
             )
             pctile_vals = np.percentile(counts, pctiles)
@@ -363,18 +436,17 @@ class Model(Object):
         num_bins: int = 10_000,
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
         if min_counts is None:
-            min_counts = [0] * len(orders)
-
-        if len(min_counts) < len(orders):
+            min_counts = [0] * max(orders)
+        elif len(min_counts) < max(orders):
             min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
 
         percentile_dict = {}
-        for order, min_count in zip(orders, min_counts):
+        for order in orders:
             counts = np.array(
                 [
                     count
                     for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_count  # type: ignore[operator]
+                    if count >= min_counts[order]  # type: ignore[operator]
                 ]
             )
             # lognormal data, so better bins in log space
