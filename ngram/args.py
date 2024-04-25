@@ -1,65 +1,135 @@
 import dataclasses
-import typing
+from typing import List, Optional, Union
+from pathlib import Path
 
 
 @dataclasses.dataclass
 class Arguments:
+    #   -----------------------------------
+    #       some general arguments
+    #   -----------------------------------
+
     # which pipeline to use
-    action: typing.Optional[str] = dataclasses.field(default="process")
+    action: str = dataclasses.field(default="preprocess")
+
+    # whether to disable tqdm
+    disable_tqdm: bool = dataclasses.field(default=False)
+
+    # whether to load the model into memory (when optional)
+    # (a loaded model is *much* faster to repeatedly query but may use more
+    # memory than is required. in general, i would only recommend not loading
+    # if you just want to check the counts of a few ngrams.)
+    load_into_memory: bool = dataclasses.field(default=True)
 
     # folder locations
-    original_corpora: typing.Optional[str] = dataclasses.field(
+    corpora: str = dataclasses.field(
         default="./data/corpora",
     )
-    processed_corpora: typing.Optional[str] = dataclasses.field(
+    processed_corpora: str = dataclasses.field(
         default="./data/corpora_processed",
     )
-    model_files: typing.Optional[str] = dataclasses.field(
-        default="./data/model_files",
-    )
-    kenlm_bin_path: typing.Optional[str] = dataclasses.field(
-        default="./kenlm/build/bin",
-    )
-    kenlm_tmp_path: typing.Optional[str] = dataclasses.field(default="./tmp")
-    stimuli: typing.Optional[str] = dataclasses.field(
+    stimuli: str = dataclasses.field(
         default="./data/stimuli",
     )
-    stimuli_analyzed: typing.Optional[str] = dataclasses.field(
+    stimuli_analyzed: str = dataclasses.field(
         default="./data/stimuli_analyzed",
     )
-
-    # general arguments (for all actions)
-    disable_tqdm: typing.Optional[bool] = dataclasses.field(default=False)
-    max_n: typing.Optional[int] = dataclasses.field(default=4)
-    # note: processing max_n >= 7 requires kenlm rebuild
-    # note: processing max_n == 1 will build a bigram model as proxy
-
-    # arguments for action=process
-    processed_filestem: typing.Optional[str] = dataclasses.field(default="all_corpora")
-    all_up_to: typing.Optional[bool] = dataclasses.field(default=True)
-    prune: typing.Optional[bool] = dataclasses.field(default=True)
-    kenlm_ram_limit_mb: typing.Optional[int] = dataclasses.field(default=4_096)
-
-    # arguments for action=analyze
-    do_single_analysis: typing.Optional[bool] = dataclasses.field(default=True)
-    do_paired_analysis: typing.Optional[bool] = dataclasses.field(default=True)
-    do_pairwise_analysis: typing.Optional[bool] = dataclasses.field(default=False)
-    columns_for_analysis: typing.Optional[typing.List[str]] = dataclasses.field(
-        default_factory=lambda: ["high_item", "low_item"],
+    model_files: str = dataclasses.field(
+        default="./data/model_files",
     )
-    percentile_min_fpm: typing.Optional[float] = dataclasses.field(default=0)
 
-    # arguments for action=construct
-    ngram_file: typing.Optional[str] = dataclasses.field(
-        default="./data/model_files/ngram/all_corpora_4.ngram",
+    #   -----------------------------------
+    #       args for action = preprocess
+    #   -----------------------------------
+
+    # input folder
+    # corpora: used as set in folder locations
+
+    # output folder
+    # processed_corpora: used as set in folder locations
+
+    # combine all files into one (or keep folder structure)
+    combine_files_as: Optional[str] = dataclasses.field(default=None)
+
+    #   -----------------------------------
+    #       args for action = train
+    #   -----------------------------------
+
+    # name of the model
+    model_name: str = dataclasses.field(default="everything_1to6")
+
+    # file or folder containing preprocessed corpora
+    # (none assumes args.processed_corpora)
+    read_from: Optional[Union[str, Path]] = dataclasses.field(default=None)
+
+    # which orders to compute statistics for
+    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 7)))
+
+    # whether to <s> and </s> in the model
+    include_sentence_boundaries: bool = dataclasses.field(default=False)
+
+    # whether/how to prune the model (like KenLM, based on absolute counts and
+    # uses the last value for higher orders)
+    min_counts: Optional[List[int]] = dataclasses.field(default=None)
+
+    #   -----------------------------------
+    #       args for action = analyze
+    #   -----------------------------------
+
+    # file containing the model
+    model_file: Union[str, Path] = dataclasses.field(
+        default="./data/model_files/everything_1to6"
     )
-    prefix_file: typing.Optional[str] = dataclasses.field(
-        default="./data/model_files/ngram/all_corpora_3.ngram",
+
+    # file containing the stimuli
+    stimuli_file: Union[str, Path] = dataclasses.field(
+        default="./data/stimuli/arnon/high_bin.csv"
     )
-    constructed_pairs_csv: typing.Optional[str] = dataclasses.field(
-        default="./data/stimuli_constructed/constructed_pairs.csv",
+
+    # columns to analyze
+    columns_for_analysis: List[str] = dataclasses.field(
+        default_factory=lambda: ["high_item", "low_item"]
     )
-    n_candidates: typing.Optional[int] = dataclasses.field(default=10_000)
-    top_bottom_k: typing.Optional[int] = dataclasses.field(default=20)
-    sampling_seed: typing.Optional[int] = dataclasses.field(default=42)
-    # note: construct also uses percentile_min_fpm (as it analyzes constructed pairs)
+
+    # output file
+    # (none will keep file name but place in args.stimuli_analyzed)
+    analyzed_file: Optional[Union[str, Path]] = dataclasses.field(default=None)
+
+    # min counts for percentile calculations
+    min_counts_for_percentile: Optional[List[int]] = dataclasses.field(default=None)
+
+    # whether to load the model into memory (when not required)
+    # (a loaded model is typically faster to query but uses a lot of memory)
+    # load_into_memory: used as set in the general arguments
+
+    #   -----------------------------------
+    #       args for action = construct
+    #   -----------------------------------
+
+    # file containing the model
+    # model_file: used as set in args for action=analyze
+
+    # output file
+    constructed_pairs_csv: Union[str, Path] = dataclasses.field(
+        default="./data/stimuli_constructed/constructed_pairs.csv"
+    )
+
+    # length of the sentences to construct
+    length: int = dataclasses.field(default=4)
+
+    # number of candidate stimuli pairs to construct
+    n_candidates: int = dataclasses.field(default=5_000_000)
+
+    # number of sentences with same prefix to pair up
+    # results in (n choose 2) pairs of similar form
+    max_per_prefix: int = dataclasses.field(default=10)
+
+    # min counts for percentile calculations
+    # min_counts_for_percentile: used as set in args for action=analyze
+
+    # seed for sampling ngrams for constructing pairs
+    sampling_seed: Optional[int] = dataclasses.field(default=None)
+
+    # whether to load the model into memory (when not required)
+    # (a loaded model is typically faster to query but uses a lot of memory)
+    # load_into_memory: used as set in the general arguments

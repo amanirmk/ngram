@@ -1,8 +1,10 @@
+from pathlib import Path
 from transformers import HfArgumentParser
 
 from ngram.abstract import Object
 from ngram.args import Arguments
-from ngram.processing import process
+from ngram.processing import preprocess_files
+from ngram.model import Model
 from ngram.analysis import analyze
 from ngram.construction import construct
 
@@ -12,62 +14,64 @@ def main() -> None:
         pass
 
     args = HfArgumentParser(Arguments).parse_args()
-    if args.action == "process":
+    if args.action == "preprocess":
         Main.info(
-            f"Beginning to process corpora in {args.original_corpora}. "
-            + f"Output will be saved in {args.processed_corpora} and "
-            + f"{args.model_files}."
+            f"Beginning to process corpora in {args.corpora}. "
+            + f"Output will be saved in {args.processed_corpora}"
         )
-        Main.info(
-            f"Building model files {'up to' if args.all_up_to else 'for'} "
-            + f"n={args.max_n}."
-        )
-        process(
-            input_folder=args.original_corpora,
-            processed_corpora_folder=args.processed_corpora,
-            model_output_folder=args.model_files,
-            n=args.max_n,
-            kenlm_bin_path=args.kenlm_bin_path,
-            kenlm_tmp_path=args.kenlm_tmp_path,
-            kenlm_ram_limit_mb=args.kenlm_ram_limit_mb,
-            proxy_n_for_unigram=(2 if args.max_n == 1 else None),
-            filestem=args.processed_filestem,
-            all_up_to=args.all_up_to,
-            prune=args.prune,
-        )
-    elif args.action == "analyze":
-        Main.info(
-            f"Beginning to analyze stimuli in {args.stimuli}. "
-            + f"Output will be saved in {args.stimuli_analyzed}."
-        )
-        analyze(
-            input_folder=args.stimuli,
-            output_folder=args.stimuli_analyzed,
-            model_files_folder=args.model_files,
-            cols=args.columns_for_analysis,
-            max_n=args.max_n,
-            percentile_min_fpm=args.percentile_min_fpm,
-            single_analysis=args.do_single_analysis,
-            paired_analysis=args.do_paired_analysis,
-            pairwise_analysis=args.do_pairwise_analysis,
+        preprocess_files(
+            input_folder=args.corpora,
+            output_folder=args.processed_corpora,
+            combine_files_as=args.combine_files_as,
             disable_tqdm=args.disable_tqdm,
+        )
+    elif args.action == "train":
+        Main.info(
+            f"Beginning to train model on {args.processed_corpora}. "
+            + f"Output will be saved in {args.model_files}."
+        )
+        model = Model(Path(args.model_files) / args.model_name)
+        if args.read_from is None:
+            args.read_from = args.processed_corpora
+        model.read_from(
+            thing_to_read=args.read_from,
+            orders=args.orders,
+            include_sentence_boundaries=args.include_sentence_boundaries,
+            disable_tqdm=args.disable_tqdm,
+        )
+        if args.min_counts is not None:
+            model.prune(min_counts=args.min_counts)
+        model.save()
+    elif args.action == "analyze":
+        Main.info(f"Beginning to analyze stimuli in {args.stimuli_file}.")
+        if args.analyzed_file is None:
+            args.analyzed_file = (
+                Path(args.stimuli_analyzed) / Path(args.stimuli_file).name
+            )
+        analyze(
+            model_file=args.model_file,
+            input_file=args.stimuli_file,
+            cols=args.columns_for_analysis,
+            output_file=args.analyzed_file,
+            min_counts_for_percentile=args.min_counts_for_percentile,
+            disable_tqdm=args.disable_tqdm,
+            load_into_memory=args.load_into_memory,
         )
     elif args.action == "construct":
         Main.info(
-            f"Beginning to construct stimuli pairs from {args.ngram_file}. "
+            f"Beginning to construct stimuli pairs with model={args.model_file}. "
             + f"Output will be saved in {args.constructed_pairs_csv}."
         )
         construct(
-            model_files_folder=args.model_files,
-            ngram_file=args.ngram_file,
-            prefix_file=args.prefix_file,
+            model_file=args.model_file,
             output_file=args.constructed_pairs_csv,
-            max_n=args.max_n,
+            length=args.length,
             n_candidates=args.n_candidates,
-            top_bottom_k=args.top_bottom_k,
-            min_fpm=args.percentile_min_fpm,
-            disable_tqdm=args.disable_tqdm,
+            max_per_prefix=args.max_per_prefix,
+            min_counts_for_percentile=args.min_counts_for_percentile,
             seed=args.sampling_seed,
+            disable_tqdm=args.disable_tqdm,
+            load_into_memory=args.load_into_memory,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")

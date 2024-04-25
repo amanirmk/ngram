@@ -19,11 +19,6 @@ ifeq (0, $(shell conda env list | grep -wc $(PACKAGE)))
 	@conda create -yn $(PACKAGE) $(EXEC)
 endif
 	@$(ACTIVATE); $(INSTALL) -e "."
-	
-## kenlm     : setup kenlm (not guaranteed to work).
-.PHONY : kenlm
-kenlm :
-	@bash setup_kenlm.sh
 
 ## format    : format code with black.
 .PHONY : format
@@ -41,7 +36,7 @@ mypy : env
 	--ignore-missing-imports
 pylint : env
 	@pylint $(PACKAGE) \
-	--disable C0112,C0113,C0114,C0115,C0116 \
+	--disable C0112,C0113,C0114,C0115,C0116,R1710,R0903,R0913,R0914,C0200,R0902 \
 	|| pylint-exit $$?
 black : env
 	@black --check .

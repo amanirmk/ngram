@@ -1,16 +1,16 @@
 import abc
 import logging
 import pathlib
-import typing
+from typing import Any, Callable, Generic, TypeVar
 
-T = typing.TypeVar("T")
+T = TypeVar("T")
 
 
-class classproperty(typing.Generic[T]):  # pylint: disable=invalid-name
-    def __init__(self, func: typing.Callable[[typing.Any], T]) -> None:
+class classproperty(Generic[T]):  # pylint: disable=invalid-name
+    def __init__(self, func: Callable[[Any], T]) -> None:
         self.func = func
 
-    def __get__(self, obj: typing.Any, cls: typing.Any) -> T:
+    def __get__(self, obj: Any, cls: Any) -> T:
         return self.func(cls)
 
 
@@ -47,8 +47,8 @@ class Object(abc.ABC):
     def error(cls, message: str) -> None:
         cls._log(message, "error")
 
-    def __setattr__(self, name: str, value: typing.Any) -> None:
+    def __setattr__(self, name: str, value: Any) -> None:
         super().__setattr__(name, value)
 
-    def __getattribute__(self, name: str) -> typing.Any:
+    def __getattribute__(self, name: str) -> Any:
         return super().__getattribute__(name)
