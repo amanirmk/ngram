@@ -48,6 +48,7 @@ class Model(Object):
                     )
 
     def save(self, model_file: Optional[Union[str, Path]] = None) -> None:
+        Model.info("Saving model.")
         self._require_model()
         if model_file is None or Path(model_file) == self._model_file:
             if self._read_only:
