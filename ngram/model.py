@@ -218,11 +218,19 @@ class Model(Object):
     def iterate_ngrams(
         self,
         order: int,
-        breadth_first: bool = False,
-        shuffle: bool = False,
+        mode: str = "standard",
         seed: Optional[int] = None,
         with_counts: bool = False,
     ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
+        assert mode in [
+            "standard",
+            "greedy_shuffle",
+            "greedy_ascend",
+            "greedy_descend",
+            "shuffle",
+            "ascend",
+            "descend",
+        ]
         if order not in self.orders():
             Model.error(f"Order {order} not found in model.")
             raise ValueError(f"Order {order} not found in model.")
@@ -230,21 +238,34 @@ class Model(Object):
             np.random.seed(seed)
         group = self._get_group(str(order))
         assert group is not None
-        return Model._traverse(group, breadth_first, shuffle, with_counts)
+        if mode == "standard" or mode.startswith("greedy"):
+            yield from Model._traverse(group, mode=mode, with_counts=with_counts)
+        else:
+            ngrams: List[Tuple[NGram, int]] = list(
+                Model._traverse(group, "standard", with_counts=True)  # type: ignore[arg-type]
+            )
+            if mode == "shuffle":
+                np.random.shuffle(ngrams)  # type: ignore[arg-type]
+            elif mode == "ascend":
+                ngrams = sorted(ngrams, key=lambda x: x[1])
+            elif mode == "descend":
+                ngrams = sorted(ngrams, key=lambda x: x[1], reverse=True)
+            for ngram, count in ngrams:
+                if with_counts:
+                    yield ngram, count
+                else:
+                    yield ngram
 
     @staticmethod
     def _traverse(
         group: dict,
-        breadth_first: bool = False,
-        shuffle: bool = False,
+        mode: str = "standard",
         with_counts: bool = False,
+        init_tokens: Optional[List[str]] = None,
     ) -> Union[Iterator[Tuple[NGram, int]], Iterator[NGram]]:
-        groups: deque = deque([(group, [])])
+        groups: deque = deque([(group, [] if init_tokens is None else init_tokens)])
         while groups:
-            if breadth_first:
-                current_group, current_tokens = groups.popleft()
-            else:
-                current_group, current_tokens = groups.pop()
+            current_group, current_tokens = groups.pop()
             next_tokens = [key for key in current_group.keys() if key != Model.COUNT]
             if len(next_tokens) == 0:
                 if with_counts:
@@ -255,8 +276,14 @@ class Model(Object):
                 else:
                     yield NGram(tokens=current_tokens)
             else:
-                if shuffle:
+                if mode == "greedy_shuffle":
                     np.random.shuffle(next_tokens)
+                elif mode in ["greedy_ascend", "greedy_descend"]:
+                    next_tokens = sorted(
+                        next_tokens,
+                        key=lambda x: current_group[x][Model.COUNT],
+                        reverse=mode.endswith("ascend"),
+                    )
                 for token in next_tokens:
                     if token != Model.UNK:
                         groups.append((current_group[token], current_tokens + [token]))
@@ -282,6 +309,9 @@ class Model(Object):
 
     def get_fpm(self, ngram: NGram) -> float:
         return self.get_frequency(ngram) * 1_000_000
+
+    def get_logprob(self, ngram: NGram) -> float:
+        return log10(self.get_frequency(ngram))
 
     def conditional_distribution(self, ngram: NGram, order: int) -> Dict[str, float]:
         assert order in self.orders(), f"Order {order} not found in model"
@@ -423,7 +453,7 @@ class Model(Object):
                 [
                     count
                     for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_counts[order]  # type: ignore[operator]
+                    if count >= min_counts[order - 1]  # type: ignore[operator]
                 ]
             )
             pctile_vals = np.percentile(counts, pctiles)
@@ -447,7 +477,7 @@ class Model(Object):
                 [
                     count
                     for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_counts[order]  # type: ignore[operator]
+                    if count >= min_counts[order - 1]  # type: ignore[operator]
                 ]
             )
             # lognormal data, so better bins in log space

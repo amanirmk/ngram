@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Iterator, List, Iterable
+from typing import Optional, Tuple, Iterator, List, Iterable, Any
 from ngram.abstract import Object
 from ngram.processing import tokenize
 
@@ -36,6 +36,21 @@ class NGram(Object):
 
     def __contains__(self, token: str) -> bool:
         return token in self._tokens
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, NGram):
+            return NotImplemented
+        return self.text() == other.text()
+
+    def __le__(self, other: Any) -> bool:
+        if not isinstance(other, NGram):
+            return NotImplemented
+        return other.text().startswith(self.text())
+
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, NGram):
+            return NotImplemented
+        return self <= other and self != other
 
     def tokens(self) -> Tuple[str, ...]:
         return self._tokens
