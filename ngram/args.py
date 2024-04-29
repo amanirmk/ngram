@@ -13,7 +13,7 @@ class Arguments:
     action: str = dataclasses.field(default="preprocess")
 
     # whether to disable tqdm
-    disable_tqdm: bool = dataclasses.field(default=False)
+    disable_tqdm: bool = dataclasses.field(default=True)
 
     # whether to load the model into memory (when optional)
     # (a loaded model is *much* faster to repeatedly query but may use more
@@ -56,14 +56,14 @@ class Arguments:
     #   -----------------------------------
 
     # name of the model
-    model_name: str = dataclasses.field(default="everything_1to6")
+    model_name: str = dataclasses.field(default="everything_1to4")
 
     # file or folder containing preprocessed corpora
     # (none assumes args.processed_corpora)
     read_from: Optional[Union[str, Path]] = dataclasses.field(default=None)
 
     # which orders to compute statistics for
-    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 7)))
+    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 5)))
 
     # whether to <s> and </s> in the model
     include_sentence_boundaries: bool = dataclasses.field(default=False)
@@ -78,7 +78,7 @@ class Arguments:
 
     # file containing the model
     model_file: Union[str, Path] = dataclasses.field(
-        default="./data/model_files/everything_1to6"
+        default="./data/model_files/everything_1to4"
     )
 
     # file containing the stimuli
@@ -96,7 +96,9 @@ class Arguments:
     analyzed_file: Optional[Union[str, Path]] = dataclasses.field(default=None)
 
     # min counts for percentile calculations
-    min_counts_for_percentile: Optional[List[int]] = dataclasses.field(default=None)
+    min_counts_for_percentile: Optional[List[int]] = dataclasses.field(
+        default_factory=lambda: [20]
+    )
 
     # whether to load the model into memory (when not required)
     # (a loaded model is typically faster to query but uses a lot of memory)
@@ -128,7 +130,7 @@ class Arguments:
     # min_counts_for_percentile: used as set in args for action=analyze
 
     # seed for sampling ngrams for constructing pairs
-    sampling_seed: Optional[int] = dataclasses.field(default=None)
+    sampling_seed: Optional[int] = dataclasses.field(default=42)
 
     # whether to load the model into memory (when not required)
     # (a loaded model is typically faster to query but uses a lot of memory)

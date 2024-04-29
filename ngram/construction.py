@@ -31,14 +31,16 @@ def construct_candidates(
         disable=disable_tqdm,
     )
     for prefix in model.iterate_ngrams(
-        order=length - 1, breadth_first=True, shuffle=True, with_counts=False
+        order=length - 1, mode="descend"  # do greedy_descend for less memory
     ):
         query = prefix.to_query(order=length)  # type: ignore[union-attr]
         group = model._get_group(query)
         if group is not None:
             ngrams = islice(
                 model._traverse(
-                    group, breadth_first=True, shuffle=True, with_counts=False
+                    group,
+                    mode="greedy_descend",
+                    init_tokens=list(prefix.tokens()),  # type: ignore[union-attr]
                 ),
                 max_per_prefix,
             )
