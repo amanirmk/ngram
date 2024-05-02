@@ -100,6 +100,10 @@ class Arguments:
         default_factory=lambda: [20]
     )
 
+    # percentage of (low freq) ngrams to remove for percentile calculations
+    # note: this is not as a decimal, ie 5 = 5%.
+    chop_percent: float = dataclasses.field(default=0.0)
+
     # whether to load the model into memory (when not required)
     # (a loaded model is typically faster to query but uses a lot of memory)
     # load_into_memory: used as set in the general arguments
@@ -126,8 +130,14 @@ class Arguments:
     # results in (n choose 2) pairs of similar form
     max_per_prefix: int = dataclasses.field(default=10)
 
+    # minimum frequency per million for a candidate ngram
+    min_candidate_fpm: float = dataclasses.field(default=0.0)
+
     # min counts for percentile calculations
     # min_counts_for_percentile: used as set in args for action=analyze
+
+    # percentage of (low freq) ngrams to remove for percentile calculations
+    # chop_percent: used as set in args for action=analyze
 
     # seed for sampling ngrams for constructing pairs
     sampling_seed: Optional[int] = dataclasses.field(default=42)

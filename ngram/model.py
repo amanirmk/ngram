@@ -439,72 +439,115 @@ class Model(Object):
         return NGram(tokens=tokens)
 
     def get_percentiles(
-        self, orders: List[int], min_counts: Optional[List[int]] = None, num: int = 400
+        self,
+        orders: List[int],
+        min_counts: Optional[List[int]] = None,
+        chop_percent: float = 0.0,
+        num: int = 400,
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
-        if min_counts is None:
-            min_counts = [0] * max(orders)
-        elif len(min_counts) < max(orders):
-            min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
-
         percentile_dict = {}
-        pctiles = np.linspace(0, 100, num=num)
-        for order in orders:
-            counts = np.array(
-                [
-                    count
-                    for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_counts[order - 1]  # type: ignore[operator]
-                ]
-            )
-            pctile_vals = np.percentile(counts, pctiles)
-            percentile_dict[order] = (pctile_vals, pctiles)
+        for order, counts in self._get_counts_for_percentiles(
+            orders, min_counts, chop_percent
+        ):
+            percentile_dict[order] = self._percentiles(counts, num)
         return percentile_dict
 
     def get_percentiles_of_pairwise_differences(
         self,
         orders: List[int],
         min_counts: Optional[List[int]] = None,
+        chop_percent: float = 0.0,
         num_bins: int = 10_000,
     ) -> Dict[int, Tuple[np.ndarray, np.ndarray]]:
+        percentile_of_difference_dict = {}
+        for order, counts in self._get_counts_for_percentiles(
+            orders, min_counts, chop_percent
+        ):
+            percentile_of_difference_dict[
+                order
+            ] = self._percentiles_of_pairwise_differences(counts, num_bins)
+        return percentile_of_difference_dict
+
+    def get_all_percentiles(
+        self,
+        orders: List[int],
+        min_counts: Optional[List[int]] = None,
+        chop_percent: float = 0.0,
+        num: int = 400,
+        num_bins: int = 10_000,
+    ) -> Tuple[
+        Dict[int, Tuple[np.ndarray, np.ndarray]],
+        Dict[int, Tuple[np.ndarray, np.ndarray]],
+    ]:
+        percentile_dict = {}
+        percentile_of_difference_dict = {}
+        for order, counts in self._get_counts_for_percentiles(
+            orders, min_counts, chop_percent
+        ):
+            # percentile
+            percentile_dict[order] = self._percentiles(counts, num)
+            # percentile of difference
+            percentile_of_difference_dict[
+                order
+            ] = self._percentiles_of_pairwise_differences(counts, num_bins)
+        return percentile_dict, percentile_of_difference_dict
+
+    def _get_counts_for_percentiles(
+        self,
+        orders: List[int],
+        min_counts: Optional[List[int]] = None,
+        chop_percent: float = 0.0,
+    ) -> Iterator[Tuple[int, List[int]]]:
         if min_counts is None:
             min_counts = [0] * max(orders)
         elif len(min_counts) < max(orders):
             min_counts = min_counts + [min_counts[-1]] * (max(orders) - len(min_counts))
 
-        percentile_dict = {}
         for order in orders:
-            counts = np.array(
-                [
-                    count
-                    for _, count in self.iterate_ngrams(order, with_counts=True)
-                    if count >= min_counts[order - 1]  # type: ignore[operator]
-                ]
-            )
-            # lognormal data, so better bins in log space
-            logcounts = np.log10(counts)
-            # divide into equal sized bins
-            bin_cnts, bin_edges = np.histogram(logcounts, bins=num_bins)
-            # use center for bin estimate
-            bin_vals = (bin_edges[:-1] + bin_edges[1:]) / 2
-            hist = np.stack((bin_cnts, bin_vals), axis=1)
-            # compute difference distribution based on binned estimates
-            diff_cnts: Dict[float, int] = defaultdict(int)
-            for i in range(len(hist)):
-                cnt1, val1 = hist[i]
-                # same bin, so just N choose 2 counts of 0 diff
-                diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
-                for j in range(i + 1, len(hist)):
-                    cnt2, val2 = hist[j]
-                    # for diff bins, N1 * N2 counts of diff
-                    # measure diff in freq space, not log space
-                    diff_cnts[abs(10**val1 - 10**val2)] += int(cnt1 * cnt2)
-            # compute percentiles
-            diffs = np.array(list(diff_cnts.keys()))
-            counts = np.array(list(diff_cnts.values()))
-            sorted_indices = np.argsort(diffs)
-            sorted_counts = counts[sorted_indices]
-            cumulative_counts = np.cumsum(sorted_counts)
-            pctiles = cumulative_counts / np.sum(sorted_counts) * 100
-            pctile_vals = diffs[sorted_indices]
-            percentile_dict[order] = (pctile_vals, pctiles)
-        return percentile_dict
+            counts = [
+                count
+                for _, count in self.iterate_ngrams(order, with_counts=True)
+                if count >= min_counts[order - 1]  # type: ignore[operator]
+            ]
+            if chop_percent > 0:
+                counts.sort()
+                counts = counts[int(len(counts) * (chop_percent / 100)) :]
+            yield order, counts  # type: ignore[misc]
+
+    @staticmethod
+    def _percentiles(counts: List[int], num: int) -> Tuple[np.ndarray, np.ndarray]:
+        pctiles = np.linspace(0, 100, num=num)
+        pctile_vals = np.percentile(np.array(counts), pctiles)
+        return pctile_vals, pctiles
+
+    @staticmethod
+    def _percentiles_of_pairwise_differences(
+        counts: List[int], num_bins: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # lognormal data, so better bins in log space
+        logcounts = np.log10(counts)
+        # divide into equal sized bins
+        bin_cnts, bin_edges = np.histogram(logcounts, bins=num_bins)
+        # use center for bin estimate
+        bin_vals = (bin_edges[:-1] + bin_edges[1:]) / 2
+        hist = np.stack((bin_cnts, bin_vals), axis=1)
+        # compute difference distribution based on binned estimates
+        diff_cnts: Dict[float, int] = defaultdict(int)
+        for i in range(len(hist)):
+            cnt1, val1 = hist[i]
+            # same bin, so just N choose 2 counts of 0 diff
+            diff_cnts[0] += int(cnt1 * (cnt1 - 1) / 2)
+            for j in range(i + 1, len(hist)):
+                cnt2, val2 = hist[j]
+                # for diff bins, N1 * N2 counts of diff
+                # measure diff in freq space, not log space
+                diff_cnts[abs(10**val1 - 10**val2)] += int(cnt1 * cnt2)
+        # compute percentiles
+        diffs = np.array(list(diff_cnts.keys()))
+        counts_arr = np.array(list(diff_cnts.values()))
+        sorted_indices = np.argsort(diffs)
+        sorted_counts = counts_arr[sorted_indices]
+        cumulative_counts = np.cumsum(sorted_counts)
+        pctiles = cumulative_counts / np.sum(sorted_counts) * 100
+        pctile_vals = diffs[sorted_indices]
+        return pctile_vals, pctiles

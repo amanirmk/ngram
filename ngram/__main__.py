@@ -54,6 +54,7 @@ def main() -> None:
             cols=args.columns_for_analysis,
             output_file=args.analyzed_file,
             min_counts_for_percentile=args.min_counts_for_percentile,
+            chop_percent=args.chop_percent,
             disable_tqdm=args.disable_tqdm,
             load_into_memory=args.load_into_memory,
         )
@@ -69,6 +70,8 @@ def main() -> None:
             n_candidates=args.n_candidates,
             max_per_prefix=args.max_per_prefix,
             min_counts_for_percentile=args.min_counts_for_percentile,
+            min_candidate_fpm=args.min_candidate_fpm,
+            chop_percent=args.chop_percent,
             seed=args.sampling_seed,
             disable_tqdm=args.disable_tqdm,
             load_into_memory=args.load_into_memory,
