@@ -67,10 +67,11 @@ def analyze_sentence_data(
     model: Model,
     stimuli: Iterable[str],
     min_counts: Optional[List[int]] = None,
+    chop_percent: float = 0.0,
     disable_tqdm: bool = False,
 ) -> pd.DataFrame:
     percentile_dict = model.get_percentiles(
-        orders=model.orders(), min_counts=min_counts
+        orders=model.orders(), min_counts=min_counts, chop_percent=chop_percent
     )
     analysis = []
     for stimulus in tqdm(
@@ -156,13 +157,11 @@ def analyze_stimulus_pair_data(
     model: Model,
     stimulus_pairs: Iterable[Tuple[str, str]],
     min_counts: Optional[List[int]] = None,
+    chop_percent: float = 0.0,
     disable_tqdm: bool = False,
 ) -> pd.DataFrame:
-    percentile_dict = model.get_percentiles(
-        orders=model.orders(), min_counts=min_counts
-    )
-    percentile_of_difference_dict = model.get_percentiles_of_pairwise_differences(
-        orders=model.orders(), min_counts=min_counts
+    percentile_dict, percentile_of_difference_dict = model.get_all_percentiles(
+        orders=model.orders(), min_counts=min_counts, chop_percent=chop_percent
     )
     analysis = []
     for stimulus_pair in tqdm(
@@ -170,7 +169,10 @@ def analyze_stimulus_pair_data(
     ):
         analysis.append(
             analyze_stimulus_pair(
-                model, stimulus_pair, percentile_dict, percentile_of_difference_dict
+                model,
+                stimulus_pair,
+                percentile_dict,
+                percentile_of_difference_dict,
             )
         )
     return pd.DataFrame(analysis)
@@ -193,6 +195,7 @@ def analyze(
     cols: List[str],
     output_file: Union[str, Path],
     min_counts_for_percentile: Optional[List[int]] = None,
+    chop_percent: float = 0.0,
     disable_tqdm: bool = False,
     load_into_memory: bool = True,
 ) -> None:
@@ -203,14 +206,22 @@ def analyze(
         Analyze.info("Analyzing sentences")
         sentences = pd.read_csv(input_file)[cols]
         analyze_sentence_data(
-            model, sentences, min_counts_for_percentile, disable_tqdm
+            model,
+            sentences,
+            min_counts_for_percentile,
+            chop_percent,
+            disable_tqdm,
         ).to_csv(output_file)
     elif len(cols) == 2:
         Analyze.info("Analyzing stimulus pairs")
         stimulus_pairs = pd.read_csv(input_file)[cols].itertuples(index=False)
         goodness_rerank(
             analyze_stimulus_pair_data(
-                model, stimulus_pairs, min_counts_for_percentile, disable_tqdm
+                model,
+                stimulus_pairs,
+                min_counts_for_percentile,
+                chop_percent,
+                disable_tqdm,
             )
         ).to_csv(output_file)
     else:
