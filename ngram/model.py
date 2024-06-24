@@ -41,10 +41,11 @@ class Model(Object):
                 try:
                     self.save()
                     Model.info("Auto-saved model.")
-                except:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     Model.error(
                         "Unable to auto-save model. "
                         + "This is typically caused by quitting Python."
+                        + f"Error: {e}"
                     )
 
     def save(self, model_file: Optional[Union[str, Path]] = None) -> None:
@@ -52,8 +53,8 @@ class Model(Object):
         self._require_model()
         if model_file is None or Path(model_file) == self._model_file:
             if self._read_only:
-                Model.error("Model is read-only")
-                raise ValueError("Model is read-only")
+                Model.error("Model is read-only, cannot write to its own file.")
+                raise ValueError("Model is read-only, cannot write to its own file.")
             with open(self._model_file, "w", encoding="utf-8") as f:
                 json.dump(self._model, f)
         else:
@@ -81,7 +82,7 @@ class Model(Object):
         with open(self._model_file, "rb") as f:
             try:
                 group = next(ijson.items(f, query))
-            except:
+            except StopIteration:
                 group = None
             return group
 
@@ -104,27 +105,27 @@ class Model(Object):
 
     def read_from(
         self,
-        thing_to_read: Union[str, Path],
+        location: Union[str, Path],
         orders: Optional[List[int]] = None,
         include_sentence_boundaries: bool = False,
         disable_tqdm: bool = True,
     ) -> None:
-        thing_to_read = Path(thing_to_read)
-        if thing_to_read.is_dir():
-            self.read_from_folder(
-                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+        location = Path(location)
+        if location.is_dir():
+            self._read_from_folder(
+                location, orders, include_sentence_boundaries, disable_tqdm
             )
-        elif thing_to_read.is_file():
-            self.read_from_text(
-                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+        elif location.is_file():
+            self._read_from_text(
+                location, orders, include_sentence_boundaries, disable_tqdm
             )
         else:
             Model.error(
-                f"Cannot read from {thing_to_read}. "
+                f"Cannot read from {location}. "
                 + "Currently only files and folders are supported."
             )
 
-    def read_from_folder(
+    def _read_from_folder(
         self,
         folder: Union[str, Path],
         orders: Optional[List[int]] = None,
@@ -137,9 +138,9 @@ class Model(Object):
             unit="file",
             disable=disable_tqdm,
         ):
-            self.read_from_text(file, orders, include_sentence_boundaries)
+            self._read_from_text(file, orders, include_sentence_boundaries)
 
-    def read_from_text(
+    def _read_from_text(
         self,
         text_file: Union[str, Path],
         orders: Optional[List[int]] = None,
@@ -344,26 +345,26 @@ class Model(Object):
             return 0.0
         return token_group[Model.COUNT] / group[Model.COUNT]
 
+    def _get_prob(self, ngram, orders) -> Optional[Tuple[float, int]]:
+        order_idx = len(orders) - 1
+        while order_idx > -1:
+            prob = self.conditional_probability(ngram, orders[order_idx])
+            if prob > 0:
+                return prob, orders[order_idx]
+            order_idx -= 1
+        return 0.0, 0
+
     def conditional_probability_with_backoff(
         self, ngram: NGram
     ) -> Tuple[float, int, bool]:
-        def get_prob(ngram, orders) -> Optional[Tuple[float, int]]:
-            order_idx = len(orders) - 1
-            while order_idx > -1:
-                prob = self.conditional_probability(ngram, orders[order_idx])
-                if prob > 0:
-                    return prob, orders[order_idx]
-                order_idx -= 1
-            return 0.0, 0
-
         orders = [o for o in self.orders() if o <= len(ngram)]
-        result = get_prob(ngram, orders)
+        result = self._get_prob(ngram, orders)
         if result is not None:
             return result[0], result[1], False
 
         # try again for predicting unknown
         ngram = NGram(tokens=ngram[:-1] + (Model.UNK,))
-        result = get_prob(ngram, orders)
+        result = self._get_prob(ngram, orders)
         if result is not None:
             return result[0], result[1], True
 

@@ -17,24 +17,24 @@ def main() -> None:
     if args.action == "preprocess":
         Main.info(
             f"Beginning to process corpora in {args.corpora}. "
-            + f"Output will be saved in {args.processed_corpora}"
+            + f"Output will be saved in {args.corpora_processed}"
         )
         preprocess_files(
             input_folder=args.corpora,
-            output_folder=args.processed_corpora,
+            output_folder=args.corpora_processed,
             combine_files_as=args.combine_files_as,
             disable_tqdm=args.disable_tqdm,
         )
     elif args.action == "train":
         Main.info(
-            f"Beginning to train model on {args.processed_corpora}. "
+            f"Beginning to train model on {args.corpora_processed}. "
             + f"Output will be saved in {args.model_files}."
         )
         model = Model(Path(args.model_files) / args.model_name)
         if args.read_from is None:
-            args.read_from = args.processed_corpora
+            args.read_from = args.corpora_processed
         model.read_from(
-            thing_to_read=args.read_from,
+            location=args.read_from,
             orders=args.orders,
             include_sentence_boundaries=args.include_sentence_boundaries,
             disable_tqdm=args.disable_tqdm,
@@ -43,6 +43,12 @@ def main() -> None:
             model.prune(min_counts=args.min_counts)
         model.save()
     elif args.action == "analyze":
+        if args.stimuli_file is None:
+            Main.info("Must provide stimuli file for analysis.")
+            raise ValueError("Must provide stimuli file for analysis.")
+        if args.model_file is None:
+            Main.info("Must provide model file for analysis.")
+            raise ValueError("Must provide model file for analysis.")
         Main.info(f"Beginning to analyze stimuli in {args.stimuli_file}.")
         if args.analyzed_file is None:
             args.analyzed_file = (
@@ -56,9 +62,11 @@ def main() -> None:
             min_counts_for_percentile=args.min_counts_for_percentile,
             chop_percent=args.chop_percent,
             disable_tqdm=args.disable_tqdm,
-            load_into_memory=args.load_into_memory,
         )
     elif args.action == "construct":
+        if args.model_file is None:
+            Main.info("Must provide model file for construction.")
+            raise ValueError("Must provide model file for construction.")
         Main.info(
             f"Beginning to construct stimuli pairs with model={args.model_file}. "
             + f"Output will be saved in {args.constructed_pairs_csv}."
@@ -72,9 +80,7 @@ def main() -> None:
             min_counts_for_percentile=args.min_counts_for_percentile,
             min_candidate_fpm=args.min_candidate_fpm,
             chop_percent=args.chop_percent,
-            seed=args.sampling_seed,
             disable_tqdm=args.disable_tqdm,
-            load_into_memory=args.load_into_memory,
         )
     else:
         raise ValueError(f"Invalid action: {args.action}")
