@@ -1,8 +1,7 @@
-from pathlib import Path
 from transformers import HfArgumentParser
 
 from ngram.abstract import Object
-from ngram.args import Arguments
+from ngram.args import Arguments, validate_args
 from ngram.processing import preprocess_files
 from ngram.model import Model
 from ngram.analysis import analyze
@@ -14,25 +13,25 @@ def main() -> None:
         pass
 
     args = HfArgumentParser(Arguments).parse_args()
+    validate_args(args)
+
     if args.action == "preprocess":
         Main.info(
-            f"Beginning to process corpora in {args.corpora}. "
-            + f"Output will be saved in {args.corpora_processed}"
+            f"Beginning to process corpora in {args.input_folder}. "
+            + f"Output will be saved in {args.output_folder}"
         )
         preprocess_files(
-            input_folder=args.corpora,
-            output_folder=args.corpora_processed,
+            input_folder=args.input_folder,
+            output_folder=args.output_folder,
             combine_files_as=args.combine_files_as,
             disable_tqdm=args.disable_tqdm,
         )
-    elif args.action == "train":
+    if args.action == "train":
         Main.info(
-            f"Beginning to train model on {args.corpora_processed}. "
-            + f"Output will be saved in {args.model_files}."
+            f"Beginning to train model on {args.read_from}. "
+            + f"Output will be saved in {args.model_file}."
         )
-        model = Model(Path(args.model_files) / args.model_name)
-        if args.read_from is None:
-            args.read_from = args.corpora_processed
+        model = Model(args.model_file)
         model.read_from(
             location=args.read_from,
             orders=args.orders,
@@ -42,48 +41,38 @@ def main() -> None:
         if args.min_counts is not None:
             model.prune(min_counts=args.min_counts)
         model.save()
-    elif args.action == "analyze":
-        if args.stimuli_file is None:
-            Main.info("Must provide stimuli file for analysis.")
-            raise ValueError("Must provide stimuli file for analysis.")
-        if args.model_file is None:
-            Main.info("Must provide model file for analysis.")
-            raise ValueError("Must provide model file for analysis.")
-        Main.info(f"Beginning to analyze stimuli in {args.stimuli_file}.")
-        if args.analyzed_file is None:
-            args.analyzed_file = (
-                Path(args.stimuli_analyzed) / Path(args.stimuli_file).name
-            )
+    if args.action == "analyze":
+        Main.info(
+            f"Beginning to analyze stimuli from {args.stimuli_file}. "
+            + f"Analysis will be done with model {args.model_file}. "
+            + f"Output will be saved in {args.output_file}."
+        )
         analyze(
             model_file=args.model_file,
             input_file=args.stimuli_file,
             cols=args.columns_for_analysis,
-            output_file=args.analyzed_file,
-            min_counts_for_percentile=args.min_counts_for_percentile,
+            output_file=args.output_file,
+            min_counts_for_percentile=args.min_counts,
             chop_percent=args.chop_percent,
             disable_tqdm=args.disable_tqdm,
         )
-    elif args.action == "construct":
-        if args.model_file is None:
-            Main.info("Must provide model file for construction.")
-            raise ValueError("Must provide model file for construction.")
+    if args.action == "construct":
         Main.info(
-            f"Beginning to construct stimuli pairs with model={args.model_file}. "
-            + f"Output will be saved in {args.constructed_pairs_csv}."
+            f"Beginning to construct stimuli pairs with model {args.model_file}. "
+            + f"Output will be saved in {args.output_file}."
         )
         construct(
             model_file=args.model_file,
-            output_file=args.constructed_pairs_csv,
+            output_file=args.output_file,
             length=args.length,
             n_candidates=args.n_candidates,
             max_per_prefix=args.max_per_prefix,
-            min_counts_for_percentile=args.min_counts_for_percentile,
+            min_counts_for_percentile=args.min_counts,
             min_candidate_fpm=args.min_candidate_fpm,
             chop_percent=args.chop_percent,
             disable_tqdm=args.disable_tqdm,
         )
-    else:
-        raise ValueError(f"Invalid action: {args.action}")
+    Main.info("All complete!")
 
 
 if __name__ == "__main__":
