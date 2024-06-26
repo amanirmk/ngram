@@ -6,6 +6,7 @@ from ngram.processing import preprocess_files
 from ngram.model import Model
 from ngram.analysis import analyze
 from ngram.construction import construct
+from ngram.extension import extend_stimulus_data
 
 
 def main() -> None:
@@ -43,13 +44,13 @@ def main() -> None:
         model.save()
     if args.action == "analyze":
         Main.info(
-            f"Beginning to analyze stimuli from {args.stimuli_file}. "
+            f"Beginning to analyze stimuli from {args.input_file}. "
             + f"Analysis will be done with model {args.model_file}. "
             + f"Output will be saved in {args.output_file}."
         )
         analyze(
             model_file=args.model_file,
-            input_file=args.stimuli_file,
+            input_file=args.input_file,
             cols=args.columns_for_analysis,
             output_file=args.output_file,
             min_counts_for_percentile=args.min_counts,
@@ -71,6 +72,27 @@ def main() -> None:
             min_candidate_fpm=args.min_candidate_fpm,
             chop_percent=args.chop_percent,
             disable_tqdm=args.disable_tqdm,
+        )
+    if args.action == "extend":
+        Main.info(
+            f"Beginning to extend stimuli from {args.input_file} "
+            + f"to length {args.length}. "
+            + f"Output will be saved in {args.output_file}."
+        )
+        extend_stimulus_data(
+            model_file=args.model_file,
+            input_file=args.input_file,
+            sentence_column=args.sentence_column,
+            output_file=args.output_file,
+            length=args.length,
+            min_prob=args.min_prob,
+            max_prob=args.max_prob,
+            extend_mode=args.extend_mode,
+            sampling_seed=args.sampling_seed,
+            disable_tqdm=args.disable_tqdm,
+            do_analysis=args.do_analysis,
+            min_counts_for_percentile=args.min_counts,
+            chop_percent=args.chop_percent,
         )
     Main.info("All complete!")
 

@@ -11,7 +11,7 @@ from ngram.processing import tokenize
 from ngram.datatypes import NGram
 
 
-class Model(Object):
+class Model(Object):  # pylint: disable=too-many-public-methods
     UNK = "<UNK>"
     BOS = "<S>"
     EOS = "</S>"
@@ -393,51 +393,126 @@ class Model(Object):
             total_logprob += logprob + log10(alpha) * (max_order - order)
         return total_logprob
 
+    def extend(  # pylint: disable=too-many-branches
+        self,
+        ngram: NGram,
+        tokens_to_add: int,
+        allow_eos: bool = False,
+        order: Optional[int] = None,
+        flexible_order: bool = True,
+        min_prob: float = 0.0,
+        max_prob: float = 1.0,
+        mode: str = "sample",
+        seed: Optional[int] = None,
+    ) -> NGram:
+        if mode not in ["sample", "maximize", "minimize"]:
+            Model.error("Mode must be one of 'sample', 'maximize', or 'minimize'")
+            raise ValueError("Mode must be one of 'sample', 'maximize', or 'minimize'")
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        while tokens_to_add > 0:
+            if order is None:
+                # start with longest order possible
+                order_to_use = max(
+                    o for o in [0] + self.orders() if o <= len(ngram) + 1
+                )
+            else:
+                # start with fixed order
+                order_to_use = order
+
+            if order_to_use == 0:
+                Model.error(
+                    "There are no orders in the model that can be used to extend the ngram."
+                )
+                raise ValueError(
+                    "There are no orders in the model that can be used to extend the ngram."
+                )
+
+            if order_to_use > len(ngram) + 1:
+                Model.error("Order is too high to extend the ngram.")
+                raise ValueError("Order is too high to extend the ngram.")
+
+            # try decreasing orders until one is found that works (if flexible_order is True)
+            while True:
+                next_tokens = self.conditional_distribution(ngram, order_to_use)
+
+                # remove special tokens
+                next_tokens = {
+                    k: v
+                    for k, v in next_tokens.items()
+                    if k
+                    not in [Model.BOS, Model.UNK]
+                    + ([Model.EOS] if not allow_eos else [])
+                }
+                # filter by probability
+                if min_prob > 0.0 or max_prob < 1.0:
+                    next_tokens = {
+                        k: v
+                        for k, v in next_tokens.items()
+                        if min_prob <= v <= max_prob
+                    }
+
+                # tokens found, exit loop
+                if len(next_tokens) > 0:
+                    break
+
+                # no tokens found, should i quit?
+                if order_to_use == 0 or not flexible_order:
+                    Model.warn(
+                        "No tokens found to extend the stimulus. "
+                        + "Returning the stimulus with <FILLER> tokens."
+                    )
+                    ngram = NGram(tokens=ngram.tokens() + ("<FILLER>",) * tokens_to_add)
+                    return ngram
+
+                # try with lower order
+                order_to_use = max(o for o in [0] + self.orders() if o < order_to_use)
+
+            # add token
+            if mode == "sample":
+                next_token = np.random.choice(
+                    list(next_tokens.keys()), p=list(next_tokens.values())
+                )
+            else:
+                next_token = min(
+                    next_tokens,
+                    key=lambda k: next_tokens[k] * (-1 if mode == "maximize" else 1),
+                )
+            ngram = NGram(tokens=ngram.tokens() + (next_token,))
+
+            if next_token == Model.EOS:
+                break
+
+            tokens_to_add -= 1
+
+        return ngram
+
     def generate(
         self,
         max_tokens: int,
-        order: Optional[int] = None,
         from_bos: bool = False,
         seed: Optional[int] = None,
     ) -> NGram:
-        orders = self.orders()
-        if order is None:
-            order = max(orders)
-        if order not in orders:
-            Model.error(f"Order {order} not found in model.")
-            raise ValueError(f"Order {order} not found in model.")
-        if any(o not in orders for o in range(1, order)):
-            Model.error("Generation requires that all lower orders are in the model.")
-            raise ValueError(
-                "Generation requires that all lower orders are in the model."
-            )
-
-        tokens = []
         if from_bos:
-            group = self._get_group(str(order))
+            group = self._get_group(str(self.orders()[0]))
             assert group is not None
             if Model.BOS not in group:
                 Model.error(f"Model does not contain {Model.BOS} tokens.")
                 raise ValueError(f"Model does not contain {Model.BOS} tokens.")
-            tokens.append(Model.BOS)
-        if seed:
-            np.random.seed(seed)
-        while len(tokens) < max_tokens:
-            order_to_use = min(len(tokens) + 1, order)
-            next_tokens = self.conditional_distribution(
-                NGram(tokens=tokens), order_to_use
-            )
-            if len(next_tokens) == 0:
-                break
-            new_token = np.random.choice(
-                list(next_tokens.keys()), p=list(next_tokens.values())
-            )
-            if new_token == Model.UNK:
-                if next_tokens[Model.UNK] == 1.0:
-                    break
-                continue
-            tokens.append(new_token)
-        return NGram(tokens=tokens)
+            ngram = NGram(tokens=[Model.BOS])
+        else:
+            ngram = NGram(tokens=[])
+
+        return self.extend(
+            ngram,
+            max_tokens,
+            allow_eos=True,
+            flexible_order=True,
+            mode="sample",
+            seed=seed,
+        )
 
     def get_percentiles(
         self,

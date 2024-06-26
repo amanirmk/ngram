@@ -218,15 +218,15 @@ def add_goodness_cols(analyzed_df: pd.DataFrame) -> pd.DataFrame:
         * analyzed_df["r_score_hard"]
     )
 
-    analyzed_df["meets_thresholds"] = (
-        analyzed_df["r_score_hard"]
-        > 0 & analyzed_df["p_score_hard"]
-        > 0
-        & (analyzed_df["d_1"] <= 256)
-        & (analyzed_df["d_2"] <= 64)
-        & (analyzed_df["d_3"] <= 16)
-        & (analyzed_df["d_4"] >= 4)
-    )
+    if orders == [1, 2, 3, 4]:
+        analyzed_df["meets_thresholds"] = (
+            (analyzed_df["r_score_hard"] > 0)
+            & (analyzed_df["p_score_hard"] > 0)
+            & (analyzed_df["d_1"] <= 256)
+            & (analyzed_df["d_2"] <= 64)
+            & (analyzed_df["d_3"] <= 16)
+            & (analyzed_df["d_4"] >= 4)
+        )
     return analyzed_df
 
 
@@ -247,7 +247,7 @@ def analyze(
         model.load_into_memory()
     if len(cols) == 1:
         Analyze.info("Analyzing sentences")
-        sentences = pd.read_csv(input_file)[cols]
+        sentences = pd.read_csv(input_file)[cols[0]]
         analyze_sentence_data(
             model,
             sentences,

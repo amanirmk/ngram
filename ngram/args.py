@@ -1,28 +1,23 @@
 import dataclasses
 from argparse import Namespace
 from typing import List, Optional, Union
-from pathlib import Path
 from ngram.abstract import Object
-
-
-class UNSET:
-    def __eq__(self, other):
-        return isinstance(other, UNSET)
 
 
 @dataclasses.dataclass
 class Arguments:
     action: str = dataclasses.field()
-    disable_tqdm: bool = dataclasses.field(default=True)
-    input_folder: Union[str, Path, UNSET] = dataclasses.field(default_factory=UNSET)
-    output_folder: Union[str, Path, UNSET] = dataclasses.field(default_factory=UNSET)
-    output_file: Union[str, Path, UNSET] = dataclasses.field(default_factory=UNSET)
+    disable_tqdm: bool = dataclasses.field(default=False)
+    input_folder: str = dataclasses.field(default="<UNSET>")
+    output_folder: str = dataclasses.field(default="<UNSET>")
+    read_from: str = dataclasses.field(default="<UNSET>")
+    input_file: str = dataclasses.field(default="<UNSET>")
+    output_file: str = dataclasses.field(default="<UNSET>")
     combine_files_as: Optional[str] = dataclasses.field(default=None)
-    model_file: Union[str, Path, UNSET] = dataclasses.field(default_factory=UNSET)
+    model_file: str = dataclasses.field(default="<UNSET>")
     orders: List[int] = dataclasses.field(default_factory=lambda: [1, 2, 3, 4])
     include_sentence_boundaries: bool = dataclasses.field(default=False)
     min_counts: Optional[Union[List[int]]] = dataclasses.field(default=None)
-    stimuli_file: Union[str, Path, UNSET] = dataclasses.field(default_factory=UNSET)
     columns_for_analysis: List[str] = dataclasses.field(
         default_factory=lambda: ["high_item", "low_item"]
     )
@@ -31,6 +26,12 @@ class Arguments:
     n_candidates: Optional[int] = dataclasses.field(default=None)
     length: int = dataclasses.field(default=4)
     max_per_prefix: Optional[int] = dataclasses.field(default=None)
+    do_analysis: bool = dataclasses.field(default=False)
+    min_prob: float = dataclasses.field(default=0.0)
+    max_prob: float = dataclasses.field(default=1.0)
+    extend_mode: str = dataclasses.field(default="maximize")
+    sampling_seed: Optional[int] = dataclasses.field(default=None)
+    sentence_column: str = dataclasses.field(default="<UNSET>")
 
 
 def validate_args(args: Namespace) -> None:
@@ -58,7 +59,7 @@ def validate_args(args: Namespace) -> None:
             "disable_tqdm",
         }
     elif args.action == "analyze":
-        required = {"model_file", "stimuli_file", "output_file"}
+        required = {"model_file", "input_file", "output_file"}
         optional = {
             "columns_for_analysis",
             "min_counts",
@@ -66,7 +67,7 @@ def validate_args(args: Namespace) -> None:
             "disable_tqdm",
         }
     elif args.action == "construct":
-        required = {"model_file", "stimuli_file", "output_file"}
+        required = {"model_file", "output_file"}
         optional = {
             "length",
             "n_candidates",
@@ -75,6 +76,20 @@ def validate_args(args: Namespace) -> None:
             "min_candidate_fpm",
             "chop_percent",
             "disable_tqdm",
+            "do_analysis",
+        }
+    elif args.action == "extend":
+        required = {"model_file", "input_file", "output_file", "sentence_column"}
+        optional = {
+            "length",
+            "min_prob",
+            "max_prob",
+            "extend_mode",
+            "sampling_seed",
+            "disable_tqdm",
+            "do_analysis",
+            "min_counts",
+            "chop_percent",
         }
     else:
         Args.error(f"Invalid action: {args.action}")
@@ -87,4 +102,6 @@ def validate_args(args: Namespace) -> None:
 
     excess = changed_args - required - optional
     if excess:
-        Args.warn(f"Unused arguments ignored: {excess}")
+        Args.warn(
+            f"You have changed the value for arguments that are not used: {excess}"
+        )

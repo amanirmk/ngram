@@ -21,13 +21,12 @@ def construct_candidates(
     disable_tqdm: bool = False,
 ) -> pd.DataFrame:
     candidate_pairs: List[Tuple[str, str]] = []
-    if n_candidates is not None:
-        pbar = tqdm(
-            total=n_candidates,
-            desc="Constructing candidates",
-            unit="pair",
-            disable=disable_tqdm,
-        )
+    pbar = tqdm(
+        total=n_candidates,
+        desc="Constructing candidates",
+        unit="pair",
+        disable=disable_tqdm,
+    )
     for prefix in model.iterate_ngrams(order=length - 1, mode="descend"):
         query = prefix.to_query(order=length)  # type: ignore[union-attr]
         group = model._get_group(query)  # pylint: disable=protected-access
@@ -49,8 +48,7 @@ def construct_candidates(
                 if n_candidates is not None and len(candidate_pairs) >= n_candidates:
                     break
                 candidate_pairs.append((n1.text(), n2.text()))  # type: ignore[union-attr]
-                if n_candidates is not None:
-                    pbar.update(1)
+                pbar.update(1)
         if n_candidates is not None and len(candidate_pairs) >= n_candidates:
             break
     return pd.DataFrame(candidate_pairs, columns=["high_item", "low_item"])
@@ -66,6 +64,7 @@ def construct(
     min_candidate_fpm: float = 0.0,
     chop_percent: float = 0.0,
     disable_tqdm: bool = False,
+    do_analysis: bool = True,
 ):
     model = Model(model_file, read_only=True)
     model.load_into_memory()
@@ -77,13 +76,14 @@ def construct(
         min_candidate_fpm=min_candidate_fpm,
         disable_tqdm=disable_tqdm,
     ).to_csv(output_file, index=False)
-    analyze(
-        model_file=model_file,
-        input_file=output_file,
-        cols=["high_item", "low_item"],
-        output_file=output_file,
-        min_counts_for_percentile=min_counts_for_percentile,
-        chop_percent=chop_percent,
-        disable_tqdm=disable_tqdm,
-        actual_model=model,  # so won't load twice
-    )
+    if do_analysis:
+        analyze(
+            model_file=model_file,
+            input_file=output_file,
+            cols=["high_item", "low_item"],
+            output_file=output_file,
+            min_counts_for_percentile=min_counts_for_percentile,
+            chop_percent=chop_percent,
+            disable_tqdm=disable_tqdm,
+            actual_model=model,  # so won't load twice
+        )

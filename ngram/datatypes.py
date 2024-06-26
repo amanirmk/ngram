@@ -19,8 +19,8 @@ class NGram(Object):
             self._tokens = tuple(tokens[-last_n:])  # type: ignore[index]
         self._n = len(self._tokens)
         self._text = " ".join(self._tokens)
-        if self._n == 0 or self._text == "":
-            NGram.warn(f"No tokens found: input={text or tokens}")
+        if self._n == 0 and text is not None:
+            NGram.warn(f"No tokens remaining after tokenization: input={text}")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._text})"
