@@ -68,6 +68,8 @@ def construct(
 ):
     model = Model(model_file, read_only=True)
     model.load_into_memory()
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+
     construct_candidates(
         model=model,
         length=length,
