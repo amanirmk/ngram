@@ -11,7 +11,7 @@ from ngram.processing import tokenize
 from ngram.datatypes import NGram
 
 
-class Model(Object):
+class Model(Object):  # pylint: disable=too-many-public-methods
     UNK = "<UNK>"
     BOS = "<S>"
     EOS = "</S>"
@@ -41,10 +41,11 @@ class Model(Object):
                 try:
                     self.save()
                     Model.info("Auto-saved model.")
-                except:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     Model.error(
                         "Unable to auto-save model. "
                         + "This is typically caused by quitting Python."
+                        + f"Error: {e}"
                     )
 
     def save(self, model_file: Optional[Union[str, Path]] = None) -> None:
@@ -52,8 +53,8 @@ class Model(Object):
         self._require_model()
         if model_file is None or Path(model_file) == self._model_file:
             if self._read_only:
-                Model.error("Model is read-only")
-                raise ValueError("Model is read-only")
+                Model.error("Model is read-only, cannot write to its own file.")
+                raise ValueError("Model is read-only, cannot write to its own file.")
             with open(self._model_file, "w", encoding="utf-8") as f:
                 json.dump(self._model, f)
         else:
@@ -81,7 +82,7 @@ class Model(Object):
         with open(self._model_file, "rb") as f:
             try:
                 group = next(ijson.items(f, query))
-            except:
+            except StopIteration:
                 group = None
             return group
 
@@ -104,27 +105,27 @@ class Model(Object):
 
     def read_from(
         self,
-        thing_to_read: Union[str, Path],
+        location: Union[str, Path],
         orders: Optional[List[int]] = None,
         include_sentence_boundaries: bool = False,
         disable_tqdm: bool = True,
     ) -> None:
-        thing_to_read = Path(thing_to_read)
-        if thing_to_read.is_dir():
-            self.read_from_folder(
-                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+        location = Path(location)
+        if location.is_dir():
+            self._read_from_folder(
+                location, orders, include_sentence_boundaries, disable_tqdm
             )
-        elif thing_to_read.is_file():
-            self.read_from_text(
-                thing_to_read, orders, include_sentence_boundaries, disable_tqdm
+        elif location.is_file():
+            self._read_from_text(
+                location, orders, include_sentence_boundaries, disable_tqdm
             )
         else:
             Model.error(
-                f"Cannot read from {thing_to_read}. "
+                f"Cannot read from {location}. "
                 + "Currently only files and folders are supported."
             )
 
-    def read_from_folder(
+    def _read_from_folder(
         self,
         folder: Union[str, Path],
         orders: Optional[List[int]] = None,
@@ -137,9 +138,9 @@ class Model(Object):
             unit="file",
             disable=disable_tqdm,
         ):
-            self.read_from_text(file, orders, include_sentence_boundaries)
+            self._read_from_text(file, orders, include_sentence_boundaries)
 
-    def read_from_text(
+    def _read_from_text(
         self,
         text_file: Union[str, Path],
         orders: Optional[List[int]] = None,
@@ -344,26 +345,26 @@ class Model(Object):
             return 0.0
         return token_group[Model.COUNT] / group[Model.COUNT]
 
+    def _get_prob(self, ngram, orders) -> Optional[Tuple[float, int]]:
+        order_idx = len(orders) - 1
+        while order_idx > -1:
+            prob = self.conditional_probability(ngram, orders[order_idx])
+            if prob > 0:
+                return prob, orders[order_idx]
+            order_idx -= 1
+        return 0.0, 0
+
     def conditional_probability_with_backoff(
         self, ngram: NGram
     ) -> Tuple[float, int, bool]:
-        def get_prob(ngram, orders) -> Optional[Tuple[float, int]]:
-            order_idx = len(orders) - 1
-            while order_idx > -1:
-                prob = self.conditional_probability(ngram, orders[order_idx])
-                if prob > 0:
-                    return prob, orders[order_idx]
-                order_idx -= 1
-            return 0.0, 0
-
         orders = [o for o in self.orders() if o <= len(ngram)]
-        result = get_prob(ngram, orders)
+        result = self._get_prob(ngram, orders)
         if result is not None:
             return result[0], result[1], False
 
         # try again for predicting unknown
         ngram = NGram(tokens=ngram[:-1] + (Model.UNK,))
-        result = get_prob(ngram, orders)
+        result = self._get_prob(ngram, orders)
         if result is not None:
             return result[0], result[1], True
 
@@ -392,51 +393,126 @@ class Model(Object):
             total_logprob += logprob + log10(alpha) * (max_order - order)
         return total_logprob
 
+    def extend(  # pylint: disable=too-many-branches
+        self,
+        ngram: NGram,
+        tokens_to_add: int,
+        allow_eos: bool = False,
+        order: Optional[int] = None,
+        flexible_order: bool = True,
+        min_prob: float = 0.0,
+        max_prob: float = 1.0,
+        mode: str = "sample",
+        seed: Optional[int] = None,
+    ) -> NGram:
+        if mode not in ["sample", "maximize", "minimize"]:
+            Model.error("Mode must be one of 'sample', 'maximize', or 'minimize'")
+            raise ValueError("Mode must be one of 'sample', 'maximize', or 'minimize'")
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        while tokens_to_add > 0:
+            if order is None:
+                # start with longest order possible
+                order_to_use = max(
+                    o for o in [0] + self.orders() if o <= len(ngram) + 1
+                )
+            else:
+                # start with fixed order
+                order_to_use = order
+
+            if order_to_use == 0:
+                Model.error(
+                    "There are no orders in the model that can be used to extend the ngram."
+                )
+                raise ValueError(
+                    "There are no orders in the model that can be used to extend the ngram."
+                )
+
+            if order_to_use > len(ngram) + 1:
+                Model.error("Order is too high to extend the ngram.")
+                raise ValueError("Order is too high to extend the ngram.")
+
+            # try decreasing orders until one is found that works (if flexible_order is True)
+            while True:
+                next_tokens = self.conditional_distribution(ngram, order_to_use)
+
+                # remove special tokens
+                next_tokens = {
+                    k: v
+                    for k, v in next_tokens.items()
+                    if k
+                    not in [Model.BOS, Model.UNK]
+                    + ([Model.EOS] if not allow_eos else [])
+                }
+                # filter by probability
+                if min_prob > 0.0 or max_prob < 1.0:
+                    next_tokens = {
+                        k: v
+                        for k, v in next_tokens.items()
+                        if min_prob <= v <= max_prob
+                    }
+
+                # tokens found, exit loop
+                if len(next_tokens) > 0:
+                    break
+
+                # no tokens found, should i quit?
+                if order_to_use == 0 or not flexible_order:
+                    Model.warn(
+                        "No tokens found to extend the stimulus. "
+                        + "Returning the stimulus with <FILLER> tokens."
+                    )
+                    ngram = NGram(tokens=ngram.tokens() + ("<FILLER>",) * tokens_to_add)
+                    return ngram
+
+                # try with lower order
+                order_to_use = max(o for o in [0] + self.orders() if o < order_to_use)
+
+            # add token
+            if mode == "sample":
+                next_token = np.random.choice(
+                    list(next_tokens.keys()), p=list(next_tokens.values())
+                )
+            else:
+                next_token = min(
+                    next_tokens,
+                    key=lambda k: next_tokens[k] * (-1 if mode == "maximize" else 1),
+                )
+            ngram = NGram(tokens=ngram.tokens() + (next_token,))
+
+            if next_token == Model.EOS:
+                break
+
+            tokens_to_add -= 1
+
+        return ngram
+
     def generate(
         self,
         max_tokens: int,
-        order: Optional[int] = None,
         from_bos: bool = False,
         seed: Optional[int] = None,
     ) -> NGram:
-        orders = self.orders()
-        if order is None:
-            order = max(orders)
-        if order not in orders:
-            Model.error(f"Order {order} not found in model.")
-            raise ValueError(f"Order {order} not found in model.")
-        if any(o not in orders for o in range(1, order)):
-            Model.error("Generation requires that all lower orders are in the model.")
-            raise ValueError(
-                "Generation requires that all lower orders are in the model."
-            )
-
-        tokens = []
         if from_bos:
-            group = self._get_group(str(order))
+            group = self._get_group(str(self.orders()[0]))
             assert group is not None
             if Model.BOS not in group:
                 Model.error(f"Model does not contain {Model.BOS} tokens.")
                 raise ValueError(f"Model does not contain {Model.BOS} tokens.")
-            tokens.append(Model.BOS)
-        if seed:
-            np.random.seed(seed)
-        while len(tokens) < max_tokens:
-            order_to_use = min(len(tokens) + 1, order)
-            next_tokens = self.conditional_distribution(
-                NGram(tokens=tokens), order_to_use
-            )
-            if len(next_tokens) == 0:
-                break
-            new_token = np.random.choice(
-                list(next_tokens.keys()), p=list(next_tokens.values())
-            )
-            if new_token == Model.UNK:
-                if next_tokens[Model.UNK] == 1.0:
-                    break
-                continue
-            tokens.append(new_token)
-        return NGram(tokens=tokens)
+            ngram = NGram(tokens=[Model.BOS])
+        else:
+            ngram = NGram(tokens=[])
+
+        return self.extend(
+            ngram,
+            max_tokens,
+            allow_eos=True,
+            flexible_order=True,
+            mode="sample",
+            seed=seed,
+        )
 
     def get_percentiles(
         self,

@@ -1,147 +1,107 @@
 import dataclasses
+from argparse import Namespace
 from typing import List, Optional, Union
-from pathlib import Path
+from ngram.abstract import Object
 
 
 @dataclasses.dataclass
 class Arguments:
-    #   -----------------------------------
-    #       some general arguments
-    #   -----------------------------------
-
-    # which pipeline to use
-    action: str = dataclasses.field(default="preprocess")
-
-    # whether to disable tqdm
-    disable_tqdm: bool = dataclasses.field(default=True)
-
-    # whether to load the model into memory (when optional)
-    # (a loaded model is *much* faster to repeatedly query but may use more
-    # memory than is required. in general, i would only recommend not loading
-    # if you just want to check the counts of a few ngrams.)
-    load_into_memory: bool = dataclasses.field(default=True)
-
-    # folder locations
-    corpora: str = dataclasses.field(
-        default="./data/corpora",
-    )
-    processed_corpora: str = dataclasses.field(
-        default="./data/corpora_processed",
-    )
-    stimuli: str = dataclasses.field(
-        default="./data/stimuli",
-    )
-    stimuli_analyzed: str = dataclasses.field(
-        default="./data/stimuli_analyzed",
-    )
-    model_files: str = dataclasses.field(
-        default="./data/model_files",
-    )
-
-    #   -----------------------------------
-    #       args for action = preprocess
-    #   -----------------------------------
-
-    # input folder
-    # corpora: used as set in folder locations
-
-    # output folder
-    # processed_corpora: used as set in folder locations
-
-    # combine all files into one (or keep folder structure)
+    action: str = dataclasses.field()
+    disable_tqdm: bool = dataclasses.field(default=False)
+    input_folder: str = dataclasses.field(default="<UNSET>")
+    output_folder: str = dataclasses.field(default="<UNSET>")
+    read_from: str = dataclasses.field(default="<UNSET>")
+    input_file: str = dataclasses.field(default="<UNSET>")
+    output_file: str = dataclasses.field(default="<UNSET>")
     combine_files_as: Optional[str] = dataclasses.field(default=None)
-
-    #   -----------------------------------
-    #       args for action = train
-    #   -----------------------------------
-
-    # name of the model
-    model_name: str = dataclasses.field(default="everything_1to4")
-
-    # file or folder containing preprocessed corpora
-    # (none assumes args.processed_corpora)
-    read_from: Optional[Union[str, Path]] = dataclasses.field(default=None)
-
-    # which orders to compute statistics for
-    orders: List[int] = dataclasses.field(default_factory=lambda: list(range(1, 5)))
-
-    # whether to <s> and </s> in the model
+    model_file: str = dataclasses.field(default="<UNSET>")
+    orders: List[int] = dataclasses.field(default_factory=lambda: [1, 2, 3, 4])
     include_sentence_boundaries: bool = dataclasses.field(default=False)
-
-    # whether/how to prune the model (like KenLM, based on absolute counts and
-    # uses the last value for higher orders)
-    min_counts: Optional[List[int]] = dataclasses.field(default=None)
-
-    #   -----------------------------------
-    #       args for action = analyze
-    #   -----------------------------------
-
-    # file containing the model
-    model_file: Union[str, Path] = dataclasses.field(
-        default="./data/model_files/everything_1to4"
-    )
-
-    # file containing the stimuli
-    stimuli_file: Union[str, Path] = dataclasses.field(
-        default="./data/stimuli/arnon/high_bin.csv"
-    )
-
-    # columns to analyze
+    min_counts: Optional[Union[List[int]]] = dataclasses.field(default=None)
     columns_for_analysis: List[str] = dataclasses.field(
         default_factory=lambda: ["high_item", "low_item"]
     )
-
-    # output file
-    # (none will keep file name but place in args.stimuli_analyzed)
-    analyzed_file: Optional[Union[str, Path]] = dataclasses.field(default=None)
-
-    # min counts for percentile calculations
-    min_counts_for_percentile: Optional[List[int]] = dataclasses.field(
-        default_factory=lambda: [20]
-    )
-
-    # percentage of (low freq) ngrams to remove for percentile calculations
-    # note: this is not as a decimal, ie 5 = 5%.
-    chop_percent: float = dataclasses.field(default=0.0)
-
-    # whether to load the model into memory (when not required)
-    # (a loaded model is typically faster to query but uses a lot of memory)
-    # load_into_memory: used as set in the general arguments
-
-    #   -----------------------------------
-    #       args for action = construct
-    #   -----------------------------------
-
-    # file containing the model
-    # model_file: used as set in args for action=analyze
-
-    # output file
-    constructed_pairs_csv: Union[str, Path] = dataclasses.field(
-        default="./data/stimuli_constructed/constructed_pairs.csv"
-    )
-
-    # length of the sentences to construct
-    length: int = dataclasses.field(default=4)
-
-    # number of candidate stimuli pairs to construct
-    n_candidates: int = dataclasses.field(default=5_000_000)
-
-    # number of sentences with same prefix to pair up
-    # results in (n choose 2) pairs of similar form
-    max_per_prefix: int = dataclasses.field(default=10)
-
-    # minimum frequency per million for a candidate ngram
     min_candidate_fpm: float = dataclasses.field(default=0.0)
+    chop_percent: float = dataclasses.field(default=0.0)
+    n_candidates: Optional[int] = dataclasses.field(default=None)
+    length: int = dataclasses.field(default=4)
+    max_per_prefix: Optional[int] = dataclasses.field(default=None)
+    do_analysis: bool = dataclasses.field(default=False)
+    min_prob: float = dataclasses.field(default=0.0)
+    max_prob: float = dataclasses.field(default=1.0)
+    extend_mode: str = dataclasses.field(default="maximize")
+    sampling_seed: Optional[int] = dataclasses.field(default=None)
+    sentence_column: str = dataclasses.field(default="<UNSET>")
 
-    # min counts for percentile calculations
-    # min_counts_for_percentile: used as set in args for action=analyze
 
-    # percentage of (low freq) ngrams to remove for percentile calculations
-    # chop_percent: used as set in args for action=analyze
+def validate_args(args: Namespace) -> None:
+    class Args(Object):
+        pass
 
-    # seed for sampling ngrams for constructing pairs
-    sampling_seed: Optional[int] = dataclasses.field(default=42)
+    changed_args = set()
+    for field in dataclasses.fields(Arguments):
+        if field.default_factory is not dataclasses.MISSING:
+            default = field.default_factory()
+        else:
+            default = field.default
+        if field.name != "action" and getattr(args, field.name) != default:
+            changed_args.add(field.name)
 
-    # whether to load the model into memory (when not required)
-    # (a loaded model is typically faster to query but uses a lot of memory)
-    # load_into_memory: used as set in the general arguments
+    if args.action == "preprocess":
+        required = {"input_folder", "output_folder"}
+        optional = {"combine_files_as", "disable_tqdm"}
+    elif args.action == "train":
+        required = {"model_file", "read_from"}
+        optional = {
+            "min_counts",
+            "include_sentence_boundaries",
+            "orders",
+            "disable_tqdm",
+        }
+    elif args.action == "analyze":
+        required = {"model_file", "input_file", "output_file"}
+        optional = {
+            "columns_for_analysis",
+            "min_counts",
+            "chop_percent",
+            "disable_tqdm",
+        }
+    elif args.action == "construct":
+        required = {"model_file", "output_file"}
+        optional = {
+            "length",
+            "n_candidates",
+            "max_per_prefix",
+            "min_counts",
+            "min_candidate_fpm",
+            "chop_percent",
+            "disable_tqdm",
+            "do_analysis",
+        }
+    elif args.action == "extend":
+        required = {"model_file", "input_file", "output_file", "sentence_column"}
+        optional = {
+            "length",
+            "min_prob",
+            "max_prob",
+            "extend_mode",
+            "sampling_seed",
+            "disable_tqdm",
+            "do_analysis",
+            "min_counts",
+            "chop_percent",
+        }
+    else:
+        Args.error(f"Invalid action: {args.action}")
+        raise ValueError(f"Invalid action: {args.action}")
+
+    missing_required = required - changed_args
+    if missing_required:
+        Args.error(f"Missing required arguments: {missing_required}")
+        raise ValueError(f"Missing required arguments: {missing_required}")
+
+    excess = changed_args - required - optional
+    if excess:
+        Args.warn(
+            f"You have changed the value for arguments that are not used: {excess}"
+        )

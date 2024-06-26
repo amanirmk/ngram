@@ -178,14 +178,55 @@ def analyze_stimulus_pair_data(
     return pd.DataFrame(analysis)
 
 
-def goodness_rerank(analyzed_df: pd.DataFrame) -> pd.DataFrame:
-    cols = [c for c in analyzed_df.columns if c.startswith("percentile_of_difference_")]
-    cols.sort()
-    to_minimize = analyzed_df[cols[:-1]].max(axis=1)
-    to_maximize = analyzed_df[cols[-1]]
-    goodness = to_maximize - to_minimize
-    analyzed_df["goodness"] = goodness
-    analyzed_df.sort_values("goodness", ascending=False, inplace=True)
+def add_goodness_cols(analyzed_df: pd.DataFrame) -> pd.DataFrame:
+    orders = [
+        int(c.split("_")[-1])
+        for c in analyzed_df.columns
+        if c.startswith("high_item_count_")
+    ]
+    orders.sort()
+
+    pctiles = np.linspace(0, 100, num=10000)
+    for k in orders:
+        analyzed_df[f"d_{k}"] = np.abs(
+            analyzed_df[f"high_item_fpm_{k}"] - analyzed_df[f"low_item_fpm_{k}"]
+        )
+        analyzed_df[f"r_{k}"] = np.abs(
+            np.log(analyzed_df[f"high_item_fpm_{k}"])
+            - np.log(analyzed_df[f"low_item_fpm_{k}"])
+        )
+        pctile_vals = np.percentile(analyzed_df[f"d_{k}"], pctiles)
+        analyzed_df[f"p_{k}"] = analyzed_df[f"d_{k}"].apply(
+            lambda v: np.interp(
+                v, pctile_vals, pctiles  # pylint: disable=cell-var-from-loop
+            )
+            / 100
+        )
+
+    analyzed_df["p_score_hard"] = analyzed_df[f"p_{orders[-1]}"] - analyzed_df[
+        [f"p_{k}" for k in orders[:-1]]
+    ].max(axis=1)
+    analyzed_df["r_score_hard"] = analyzed_df[f"r_{orders[-1]}"] - analyzed_df[
+        [f"r_{k}" for k in orders[:-1]]
+    ].max(axis=1)
+
+    analyzed_df["goodness"] = (
+        analyzed_df[f"p_{orders[-1]}"]
+        * (1 - analyzed_df[[f"p_{k}" for k in orders[:-1]]]).prod(axis=1)
+        * analyzed_df["p_score_hard"]
+        * analyzed_df[f"d_{orders[-1]}"]
+        * analyzed_df["r_score_hard"]
+    )
+
+    if orders == [1, 2, 3, 4]:
+        analyzed_df["meets_thresholds"] = (
+            (analyzed_df["r_score_hard"] > 0)
+            & (analyzed_df["p_score_hard"] > 0)
+            & (analyzed_df["d_1"] <= 256)
+            & (analyzed_df["d_2"] <= 64)
+            & (analyzed_df["d_3"] <= 16)
+            & (analyzed_df["d_4"] >= 4)
+        )
     return analyzed_df
 
 
@@ -197,14 +238,16 @@ def analyze(
     min_counts_for_percentile: Optional[List[int]] = None,
     chop_percent: float = 0.0,
     disable_tqdm: bool = False,
-    load_into_memory: bool = True,
+    actual_model: Optional[Model] = None,
 ) -> None:
-    model = Model(model_file, read_only=True)
-    if load_into_memory:
+    if actual_model is not None:
+        model = actual_model
+    else:
+        model = Model(model_file, read_only=True)
         model.load_into_memory()
     if len(cols) == 1:
         Analyze.info("Analyzing sentences")
-        sentences = pd.read_csv(input_file)[cols]
+        sentences = pd.read_csv(input_file)[cols[0]]
         analyze_sentence_data(
             model,
             sentences,
@@ -215,7 +258,7 @@ def analyze(
     elif len(cols) == 2:
         Analyze.info("Analyzing stimulus pairs")
         stimulus_pairs = pd.read_csv(input_file)[cols].itertuples(index=False)
-        goodness_rerank(
+        add_goodness_cols(
             analyze_stimulus_pair_data(
                 model,
                 stimulus_pairs,
