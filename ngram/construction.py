@@ -65,7 +65,7 @@ def construct(
     chop_percent: float = 0.0,
     disable_tqdm: bool = False,
     do_analysis: bool = True,
-):    
+):
     model = Model(model_file, read_only=True)
     model.load_into_memory()
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)

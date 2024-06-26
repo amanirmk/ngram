@@ -55,7 +55,7 @@ class Model(Object):  # pylint: disable=too-many-public-methods
             if self._read_only:
                 Model.error("Model is read-only, cannot write to its own file.")
                 raise ValueError("Model is read-only, cannot write to its own file.")
-            Path(model_file).parent.mkdir(parents=True, exist_ok=True)
+            Path(self._model_file).parent.mkdir(parents=True, exist_ok=True)
             with open(self._model_file, "w", encoding="utf-8") as f:
                 json.dump(self._model, f)
         else:

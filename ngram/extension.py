@@ -30,7 +30,7 @@ def extend_stimulus_data(
     model = Model(model_file, read_only=True)
     model.load_into_memory()
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-    
+
     df = pd.read_csv(input_file)[[sentence_column]]
 
     def extend_sentence(sentence: str) -> str:

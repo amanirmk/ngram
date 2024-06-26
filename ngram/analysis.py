@@ -247,7 +247,7 @@ def analyze(
         model.load_into_memory()
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-    
+
     if len(cols) == 1:
         Analyze.info("Analyzing sentences")
         sentences = pd.read_csv(input_file)[cols[0]]
