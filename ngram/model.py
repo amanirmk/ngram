@@ -438,6 +438,7 @@ class Model(Object):  # pylint: disable=too-many-public-methods
 
             # try decreasing orders until one is found that works (if flexible_order is True)
             while True:
+                assert order_to_use in self.orders()
                 next_tokens = self.conditional_distribution(ngram, order_to_use)
 
                 # remove special tokens
@@ -460,7 +461,10 @@ class Model(Object):  # pylint: disable=too-many-public-methods
                 if len(next_tokens) > 0:
                     break
 
-                # no tokens found, should i quit?
+                # try with lower order
+                order_to_use = max(o for o in [0] + self.orders() if o < order_to_use)
+
+                # should i quit?
                 if order_to_use == 0 or not flexible_order:
                     Model.warn(
                         "No tokens found to extend the stimulus. "
@@ -468,9 +472,6 @@ class Model(Object):  # pylint: disable=too-many-public-methods
                     )
                     ngram = NGram(tokens=ngram.tokens() + ("<FILLER>",) * tokens_to_add)
                     return ngram
-
-                # try with lower order
-                order_to_use = max(o for o in [0] + self.orders() if o < order_to_use)
 
             # add token
             if mode == "sample":
