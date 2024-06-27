@@ -477,7 +477,7 @@ class Model(Object):  # pylint: disable=too-many-public-methods
             if mode == "sample":
                 total = sum(next_tokens.values())
                 if total < 1:  # normalize probs
-                    next_tokens = {t:p/total for t,p in next_tokens.items()}
+                    next_tokens = {t: p / total for t, p in next_tokens.items()}
 
                 next_token = np.random.choice(
                     list(next_tokens.keys()), p=list(next_tokens.values())
