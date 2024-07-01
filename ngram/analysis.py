@@ -48,12 +48,13 @@ def analyze_sentence(
     model: Model,
     sentence: str,
     percentile_dict: Dict[int, Tuple[np.ndarray, np.ndarray]],
+    omit_unk: bool,
 ):
     ngram = NGram(text=sentence)
     analysis: Dict[str, Any] = {
         "sentence": sentence,
         "tokenized_sentence": ngram.text(),
-        "estimated_logprob": model.estimate_logprob(ngram),
+        "estimated_logprob": model.estimate_logprob(ngram, omit_unk=omit_unk),
         "logprob_per_token": model.logprobs_per_token(ngram),
     }
     for order in model.orders():
@@ -68,6 +69,7 @@ def analyze_sentence_data(
     stimuli: Iterable[str],
     min_counts: Optional[List[int]] = None,
     chop_percent: float = 0.0,
+    omit_unk: bool = False,
     disable_tqdm: bool = False,
 ) -> pd.DataFrame:
     percentile_dict = model.get_percentiles(
@@ -77,7 +79,7 @@ def analyze_sentence_data(
     for stimulus in tqdm(
         stimuli, desc="Analyzing sentences", unit="sentence", disable=disable_tqdm
     ):
-        analysis.append(analyze_sentence(model, stimulus, percentile_dict))
+        analysis.append(analyze_sentence(model, stimulus, percentile_dict, omit_unk))
     return pd.DataFrame(analysis)
 
 
@@ -237,6 +239,7 @@ def analyze(
     output_file: Union[str, Path],
     min_counts_for_percentile: Optional[List[int]] = None,
     chop_percent: float = 0.0,
+    omit_unk: bool = False,
     disable_tqdm: bool = False,
     actual_model: Optional[Model] = None,
 ) -> None:
@@ -256,6 +259,7 @@ def analyze(
             sentences,
             min_counts_for_percentile,
             chop_percent,
+            omit_unk,
             disable_tqdm,
         ).to_csv(output_file)
     elif len(cols) == 2:

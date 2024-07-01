@@ -32,6 +32,9 @@ class Arguments:
     extend_mode: str = dataclasses.field(default="maximize")
     sampling_seed: Optional[int] = dataclasses.field(default=None)
     sentence_column: str = dataclasses.field(default="<UNSET>")
+    preferred_order: Optional[int] = dataclasses.field(default=None)
+    flexible_order: bool = dataclasses.field(default=True)
+    omit_unk: bool = dataclasses.field(default=False)
 
 
 def validate_args(args: Namespace) -> None:
@@ -65,6 +68,7 @@ def validate_args(args: Namespace) -> None:
             "min_counts",
             "chop_percent",
             "disable_tqdm",
+            "omit_unk",
         }
     elif args.action == "construct":
         required = {"model_file", "output_file"}
@@ -82,6 +86,8 @@ def validate_args(args: Namespace) -> None:
         required = {"model_file", "input_file", "output_file", "sentence_column"}
         optional = {
             "length",
+            "preferred_order",
+            "flexible_order",
             "min_prob",
             "max_prob",
             "extend_mode",
@@ -90,6 +96,7 @@ def validate_args(args: Namespace) -> None:
             "do_analysis",
             "min_counts",
             "chop_percent",
+            "omit_unk",
         }
     else:
         Args.error(f"Invalid action: {args.action}")

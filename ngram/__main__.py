@@ -55,6 +55,7 @@ def main() -> None:
             output_file=args.output_file,
             min_counts_for_percentile=args.min_counts,
             chop_percent=args.chop_percent,
+            omit_unk=args.omit_unk,
             disable_tqdm=args.disable_tqdm,
         )
     if args.action == "construct":
@@ -85,6 +86,8 @@ def main() -> None:
             sentence_column=args.sentence_column,
             output_file=args.output_file,
             length=args.length,
+            preferred_order=args.preferred_order,
+            flexible_order=args.flexible_order,
             min_prob=args.min_prob,
             max_prob=args.max_prob,
             extend_mode=args.extend_mode,
@@ -93,6 +96,7 @@ def main() -> None:
             do_analysis=args.do_analysis,
             min_counts_for_percentile=args.min_counts,
             chop_percent=args.chop_percent,
+            omit_unk=args.omit_unk,
         )
     Main.info("All complete!")
 

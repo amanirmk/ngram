@@ -18,6 +18,8 @@ def extend_stimulus_data(
     sentence_column: str,
     output_file: Union[str, Path],
     length: int,
+    preferred_order: Optional[int] = None,
+    flexible_order: bool = True,
     min_prob: float = 0.0,
     max_prob: float = 1.0,
     extend_mode: str = "maximize",
@@ -26,7 +28,8 @@ def extend_stimulus_data(
     do_analysis: bool = True,
     min_counts_for_percentile: Optional[List[int]] = None,
     chop_percent: float = 0.0,
-):
+    omit_unk: bool = False,
+) -> None:
     model = Model(model_file, read_only=True)
     model.load_into_memory()
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
@@ -39,8 +42,8 @@ def extend_stimulus_data(
             ngram=ngram,
             tokens_to_add=length - len(ngram),
             allow_eos=False,
-            order=None,
-            flexible_order=True,
+            order=preferred_order,
+            flexible_order=flexible_order,
             min_prob=min_prob,
             max_prob=max_prob,
             mode=extend_mode,
@@ -64,6 +67,7 @@ def extend_stimulus_data(
             output_file=output_file,  # pylint: disable=duplicate-code
             min_counts_for_percentile=min_counts_for_percentile,
             chop_percent=chop_percent,
+            omit_unk=omit_unk,
             disable_tqdm=disable_tqdm,
             actual_model=model,  # so won't load twice
         )
