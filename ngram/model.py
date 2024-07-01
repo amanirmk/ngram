@@ -384,14 +384,18 @@ class Model(Object):  # pylint: disable=too-many-public-methods
         ]
         return result
 
-    def estimate_logprob(self, ngram: NGram, alpha: float = 0.4) -> float:
+    def estimate_logprob(
+        self, ngram: NGram, alpha: float = 0.4, omit_unk=False
+    ) -> float:
         # uses stupid backoff (with whatever orders present in model)
         # using alpha=0.4 from Google paper (Brants et al., 2007)
         # could probably get a heuristic for alpha based on data
         assert alpha > 0.0, "Alpha must be greater than 0"
         max_order = max(o for o in self.orders() if o <= len(ngram))
         total_logprob = 0.0
-        for _, logprob, order, _ in self.logprobs_per_token(ngram):
+        for _, logprob, order, is_unk in self.logprobs_per_token(ngram):
+            if omit_unk and is_unk:
+                continue
             total_logprob += logprob + log10(alpha) * (max_order - order)
         return total_logprob
 
